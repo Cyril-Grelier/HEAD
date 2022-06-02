@@ -1,0 +1,54 @@
+# Prerequisites
+*.d
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+build
+build_release
+conan
+venv
+
+outputs/
+xlsx_files/
+*.tar.gz
+*.xlsx
+*.csv
+to_eval
+*.running
+
+docs/_build
+docs/_static
+docs/_templates
+docs/api
+thirdparty/
+.ipynb_checkpoints/
+plots/
+.vscode/

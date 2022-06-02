@@ -1,11 +1,10 @@
+#include "gfile.h"
+#include <ctype.h>
+#include <iostream>
+#include <sstream>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
-#include <sstream>
-#include <iostream>
-#include "gfile.h"
-
 
 /*!
  *  \class GInputFile
@@ -17,28 +16,25 @@
  *  \brief A GInputFile function.
  *  \return a FILE pointer.
  */
-void GInputFile::open()
-{
+void GInputFile::open() {
     file = fopen(fileName.c_str(), "r");
-    setlocale(LC_NUMERIC, "C");  // A cause des . et , (Réglage C)
-    if(!file){
+    setlocale(LC_NUMERIC, "C"); // A cause des . et , (Rï¿½glage C)
+    if (!file) {
         std::ostringstream output;
         output << "File ::" << fileName << " does not exist";
         perror("\nGInputFile::load : input file open error");
         perror(fileName.c_str());
-	exit(1);
+        exit(1);
     }
 }
 
-void GInputFile::open(char* st)
-{
+void GInputFile::open(char *st) {
     fileName = st;
     open();
 }
-void GInputFile::close()
-{
+void GInputFile::close() {
     fclose(file);
-    setlocale(LC_NUMERIC, "");  // A cause des . et , (Réglage par défaut)
+    setlocale(LC_NUMERIC, ""); // A cause des . et , (Rï¿½glage par dï¿½faut)
 }
 
 /*!
@@ -46,12 +42,11 @@ void GInputFile::close()
  *
  * \return the line read
  */
-char* GInputFile::readLine()
-{
-    indiceToken = 0 ;
-    char* l;
-    l = fgets(line,MAX_LINE_LENGTH, file);
-    strlenline = strlen(line) ;
+char *GInputFile::readLine() {
+    indiceToken = 0;
+    char *l;
+    l = fgets(line, MAX_LINE_LENGTH, file);
+    strlenline = strlen(line);
     return l;
 }
 
@@ -61,70 +56,68 @@ char* GInputFile::readLine()
  *
  * \return the line read
  */
-char* GInputFile::readUncommentedLine()
-{
+char *GInputFile::readUncommentedLine() {
     char *l;
-    do{
+    do {
         l = readLine();
-    }while((l!=NULL) && (l[0]=='#' || l[0]=='\n')) ;
+    } while ((l != NULL) && (l[0] == '#' || l[0] == '\n'));
     return l;
 }
-
-
 
 /*!
  * returns next token from line (token = all symbols except space/tab/newline)
  *
  * \return the next token
  */
-char* GInputFile::getNextToken()
-{
-    if (indiceToken!=0)
-        indiceToken++ ;
+char *GInputFile::getNextToken() {
+    if (indiceToken != 0)
+        indiceToken++;
 
-    int indiceDebut = indiceToken ;
+    int indiceDebut = indiceToken;
 
-    while (!(isspace(line[indiceToken]) || line[indiceToken]==';'|| line[indiceToken]==':') && (indiceToken<strlenline)) {
-        token[indiceToken-indiceDebut]=line[indiceToken] ;
-        indiceToken++ ;
+    while (!(isspace(line[indiceToken]) || line[indiceToken] == ';' ||
+             line[indiceToken] == ':') &&
+           (indiceToken < strlenline)) {
+        token[indiceToken - indiceDebut] = line[indiceToken];
+        indiceToken++;
     }
-    token[indiceToken-indiceDebut]='\0' ;
-    if (token[0]=='\0') return NULL ;
-    return token ;
+    token[indiceToken - indiceDebut] = '\0';
+    if (token[0] == '\0')
+        return NULL;
+    return token;
 }
-
 
 /*!
  * returns next token from line (token = all symbols except parameter/newline)
  *
  * \return the next token
  */
-char* GInputFile::getNextToken(char separator)
-{
-    if (indiceToken!=0)
-        indiceToken++ ;
+char *GInputFile::getNextToken(char separator) {
+    if (indiceToken != 0)
+        indiceToken++;
 
-    int indiceDebut = indiceToken ;
+    int indiceDebut = indiceToken;
 
-    while (!(line[indiceToken]==separator) && (indiceToken<strlenline)) {
-        token[indiceToken-indiceDebut]=line[indiceToken] ;
-        indiceToken++ ;
+    while (!(line[indiceToken] == separator) && (indiceToken < strlenline)) {
+        token[indiceToken - indiceDebut] = line[indiceToken];
+        indiceToken++;
     }
-    token[indiceToken-indiceDebut]='\0' ;
-    if (token[0]=='\0') return NULL ;
-    return token ;
+    token[indiceToken - indiceDebut] = '\0';
+    if (token[0] == '\0')
+        return NULL;
+    return token;
 }
 
 /*!
  * Return the end of the line starting from current token.
  *
  */
-string GInputFile::getEndOfLine(){
-    //int strlenline = strlen(line);
+string GInputFile::getEndOfLine() {
+    // int strlenline = strlen(line);
 
     line[strlenline - 1] = 0;
 
-    while( isspace(line[indiceToken]) && indiceToken < strlenline )
+    while (isspace(line[indiceToken]) && indiceToken < strlenline)
         indiceToken++;
 
     return string(line + indiceToken);
@@ -135,9 +128,8 @@ string GInputFile::getEndOfLine(){
  *
  * \return the next int token
  */
-int GInputFile::getNextIntToken()
-{
-    return atoi(getNextToken()) ;
+int GInputFile::getNextIntToken() {
+    return atoi(getNextToken());
 }
 
 /*!
@@ -145,14 +137,13 @@ int GInputFile::getNextIntToken()
  *
  * \return the next float token
  */
-float GInputFile::getNextFloatToken()
-{
-    char* p=getNextToken();
+float GInputFile::getNextFloatToken() {
+    char *p = getNextToken();
     if ((p = strchr(p, ',')) != NULL)
         *p = '.';
 
-    return atof(token) ;
-//    return atof(getNextToken()) ;
+    return atof(token);
+    //    return atof(getNextToken()) ;
 }
 
 /*!
@@ -160,16 +151,16 @@ float GInputFile::getNextFloatToken()
  *
  * \return the line that contains the pattern
  */
-char* GInputFile::seek(char *patt){
+char *GInputFile::seek(char *patt) {
     int len = strlen(patt);
     int found = 0;
 
-    while( !found ){
-        char* l = readUncommentedLine();
-        if( l==NULL )
+    while (!found) {
+        char *l = readUncommentedLine();
+        if (l == NULL)
             return NULL;
         l[len] = '\0';
-        if( strcmp(l,patt)==0 )
+        if (strcmp(l, patt) == 0)
             return l;
     }
 
