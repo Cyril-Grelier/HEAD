@@ -11,8 +11,8 @@
 #include <unistd.h>
 
 #include "head.h"
-#include "util/gfile.h"
 
+#include "util/gfile.h"
 #define ANALYSE 0
 
 using namespace std;
@@ -21,7 +21,8 @@ void Head::compute() {
     startTime = clock();
     struct timeval tv;
     gettimeofday(&tv, NULL);
-    humanTime = (double)tv.tv_sec + (double)tv.tv_usec / 1000000.0;
+    humanTime =
+        static_cast<double>(tv.tv_sec) + static_cast<double>(tv.tv_usec) / 1000000.0;
 
     buildBaseName();
     initRandSeed();
@@ -44,7 +45,7 @@ void Head::compute() {
     vector<Solution> vFils(2);
     vector<TabouSearch> vTs(2, TabouSearch(graph, nbColors));
 
-    int seuil = swapingRate * graph->nbSommets;
+    int seuil = swapingRate * graph->nb_vertices;
     proxi = 0;
     bool found = false;
     int currentElite = 0;
@@ -149,19 +150,16 @@ Solution Head::buildChild(vector<Solution> &vParents, int startParent) {
     Solution res(graph, nbColors);
 
     int nbParents = 2;
-    double tSizeOfColors[nbParents][nbColors];
+    std::vector<std::vector<double>> tSizeOfColors(nbParents,
+                                                   std::vector<double>(nbColors, 0));
 
     for (int i = 0; i < nbParents; i++) {
-        for (int j = 0; j < nbColors; j++) {
-            tSizeOfColors[i][j] = 0;
-        }
-
-        for (int j = 0; j < graph->nbSommets; j++) {
+        for (int j = 0; j < graph->nb_vertices; j++) {
             tSizeOfColors[i][vParents[i].tColor[j]]++;
         }
     }
 
-    for (int i = 0; i < graph->nbSommets; i++)
+    for (int i = 0; i < graph->nb_vertices; i++)
         res.tColor[i] = -1;
 
     double valMax;
@@ -170,7 +168,7 @@ Solution Head::buildChild(vector<Solution> &vParents, int startParent) {
     for (int i = 0; i < nbColors; i++) {
         int indice = (startParent + i) % nbParents;
         Solution &currentParent = vParents[indice];
-        double *currentSizeOfColors = tSizeOfColors[indice];
+        std::vector<double> currentSizeOfColors = tSizeOfColors[indice];
         valMax = -1;
         colorMax = -1;
 
@@ -197,7 +195,7 @@ Solution Head::buildChild(vector<Solution> &vParents, int startParent) {
             }
         }
 
-        for (int j = 0; j < graph->nbSommets; j++) {
+        for (int j = 0; j < graph->nb_vertices; j++) {
             if (currentParent.tColor[j] == colorMax && res.tColor[j] < 0) {
                 res.tColor[j] = i;
 
@@ -209,7 +207,7 @@ Solution Head::buildChild(vector<Solution> &vParents, int startParent) {
     }
 
     int nbNotAttribute = 0;
-    for (int i = 0; i < graph->nbSommets; i++) {
+    for (int i = 0; i < graph->nb_vertices; i++) {
         if (res.tColor[i] < 0) {
             nbNotAttribute++;
             res.tColor[i] = (rand() / (double)RAND_MAX) * nbColors;
@@ -223,19 +221,16 @@ Solution Head::buildChild(vector<Solution> &vParents, vector<double> &vPoids) {
     Solution res(graph, nbColors);
 
     int nbParents = 2;
-    int tSizeOfColors[nbParents][nbColors];
+
+    std::vector<std::vector<int>> tSizeOfColors(nbParents, std::vector<int>(nbColors, 0));
 
     for (int i = 0; i < nbParents; i++) {
-        for (int j = 0; j < nbColors; j++) {
-            tSizeOfColors[i][j] = 0;
-        }
-
-        for (int j = 0; j < graph->nbSommets; j++) {
+        for (int j = 0; j < graph->nb_vertices; j++) {
             tSizeOfColors[i][vParents[i].tColor[j]]++;
         }
     }
 
-    for (int i = 0; i < graph->nbSommets; i++)
+    for (int i = 0; i < graph->nb_vertices; i++)
         res.tColor[i] = -1;
 
     double valMax;
@@ -255,7 +250,7 @@ Solution Head::buildChild(vector<Solution> &vParents, vector<double> &vPoids) {
         }
 
         Solution &currentParent = vParents[indice];
-        int *currentSizeOfColors = tSizeOfColors[indice];
+        std::vector<int> currentSizeOfColors = tSizeOfColors[indice];
         valMax = -1;
         colorMax = -1;
 
@@ -282,7 +277,7 @@ Solution Head::buildChild(vector<Solution> &vParents, vector<double> &vPoids) {
             }
         }
 
-        for (int j = 0; j < graph->nbSommets; j++) {
+        for (int j = 0; j < graph->nb_vertices; j++) {
             if (currentParent.tColor[j] == colorMax && res.tColor[j] < 0) {
                 res.tColor[j] = i;
 
@@ -293,7 +288,7 @@ Solution Head::buildChild(vector<Solution> &vParents, vector<double> &vPoids) {
         }
     }
 
-    for (int i = 0; i < graph->nbSommets; i++) {
+    for (int i = 0; i < graph->nb_vertices; i++) {
         if (res.tColor[i] < 0) {
             res.tColor[i] = (rand() / (double)RAND_MAX) * nbColors;
         }
@@ -340,7 +335,7 @@ void Head::saveBestColoring(char *outputFile) {
                 weightParent * 100,
                 tauxAcceptWorst,
                 randSeed[0]);
-        for (int i = 0; i < graph->nbSommets; i++) {
+        for (int i = 0; i < graph->nb_vertices; i++) {
             fprintf(f, "%d ", bestSol.tColor[i]);
         }
         fprintf(f, "\n");
@@ -381,7 +376,7 @@ void Head::saveConfig() {
     fprintf(f, "#Parameters :\n");
     fprintf(f,
             "%s\t%d\t%lld\t%d\t%d\t%d\t%f\t%f\n\n",
-            graph->filename.c_str(),
+            graph->name.c_str(),
             nbColors,
             nbLocalSearch,
             nbGeneration,
@@ -411,7 +406,7 @@ void Head::saveConfig() {
     bestSol.save(filename);
 }
 
-void Head::loadConfig(string filename) {
+void Head::loadConfig(std::string filename) {
     GInputFile infile(filename);
     infile.open();
     // char* buf;
@@ -432,11 +427,11 @@ void Head::loadConfig(string filename) {
     infile.readUncommentedLine(); // Starting times
 
     /// Population
-    int nbSommets = graph->nbSommets;
+    int nb_vertices = graph->nb_vertices;
     for (int i = 0; i < 4; i++) {
         infile.readUncommentedLine();
         Solution sol(graph, nbColors);
-        for (int i = 0; i < nbSommets; i++)
+        for (int j = 0; j < nb_vertices; j++)
             sol.tColor[i] = infile.getNextIntToken();
         sol.computeConflicts();
         vPopulation[i] = sol;
@@ -450,7 +445,7 @@ void Head::loadConfig(string filename) {
     /// Bestsol
     infile.readUncommentedLine();
     bestSol = Solution(graph, nbColors);
-    for (int i = 0; i < nbSommets; i++)
+    for (int i = 0; i < nb_vertices; i++)
         bestSol.tColor[i] = infile.getNextIntToken();
     bestSol.computeConflicts();
     printf("\tBestsol chargee\n");
@@ -463,9 +458,9 @@ void Head::loadConfig(string filename) {
 
 void Head::buildBaseName() {
     ostringstream oss;
-    oss << graph->filename << "_k" << nbColors;
+    oss << graph->name << "_k" << nbColors;
     baseName = oss.str();
-    unsigned int pos = baseName.find_last_of('/') + 1;
+    size_t pos = baseName.find_last_of('/') + 1;
 
     if (pos > baseName.length())
         pos = 0;

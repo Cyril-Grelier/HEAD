@@ -1,37 +1,26 @@
-#ifndef GRAPHE_H
-#define GRAPHE_H
+#pragma once
 
+#include <memory>
 #include <string>
 #include <vector>
 
-#include "util/gfile.h"
+struct Graph {
+    const std::string name;
+    const int nb_vertices;
+    const int nb_edges;
+    const std::vector<std::pair<int, int>> edges_list;
+    const std::vector<std::vector<bool>> adjacency_matrix;
+    const std::vector<std::vector<int>> neighborhood;
+    const std::vector<int> degrees;
+    const std::vector<int> weights;
 
-using namespace std;
-
-class Graph {
-    void buildVoisins(); // cree le vecteur des voisins de chaque sommet
-
-  public:
-    Graph() {
-        filename = "";
-        nbSommets = 0;
-        nbArretes = 0;
-        tConnect = NULL;
-        tVoisins = NULL;
-    }
-    Graph(string fname) {
-        filename = fname;
-        loadGraph();
-    }
-    ~Graph();
-    void loadGraph();
-    void loadMatrixGraph(GInputFile &infile);
-
-    int nbSommets;
-    int nbArretes;
-    char **tConnect;       // tableau carre des connections noeud à noeud
-    vector<int> *tVoisins; // tableau qui pour chaque noeud contient la liste des voisins
-    string filename;
+    explicit Graph(const std::string &name_,
+                   const int &nb_vertices_,
+                   const int &nb_edges_,
+                   const std::vector<std::pair<int, int>> &edges_list_,
+                   const std::vector<std::vector<bool>> &adjacency_matrix_,
+                   const std::vector<std::vector<int>> &neighborhood_,
+                   const std::vector<int> &degrees_);
 };
 
-#endif
+Graph *load_graph(const std::string &instance_name);

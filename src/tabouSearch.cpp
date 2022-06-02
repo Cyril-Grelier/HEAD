@@ -18,18 +18,18 @@ TabouSearch::TabouSearch() {
 
 TabouSearch::~TabouSearch() {
     if (graph) {
-        int nbSommets = graph->nbSommets;
+        int nb_vertices = graph->nb_vertices;
         delete[] tConflicts;
         delete[] tNbChanges;
         delete[] tNbConflicts;
         delete[] tTotalBestImprove;
 
-        for (int i = 0; i < nbSommets; i++) {
+        for (int i = 0; i < nb_vertices; i++) {
             delete[] tNewConflitsWithColor[i];
         }
         delete[] tNewConflitsWithColor;
 
-        for (int i = 0; i < nbSommets; i++) {
+        for (int i = 0; i < nb_vertices; i++) {
             delete[] tTabou[i];
         }
         delete[] tTabou;
@@ -37,7 +37,7 @@ TabouSearch::~TabouSearch() {
         // optimisation1
         delete[] tBestImprove;
         delete[] tNbBestImprove;
-        for (int i = 0; i < nbSommets; i++) {
+        for (int i = 0; i < nb_vertices; i++) {
             delete[] ttBestImproveColor[i];
         }
         delete[] ttBestImproveColor;
@@ -57,25 +57,25 @@ TabouSearch &TabouSearch::operator=(const TabouSearch &ts) {
     return *this;
 }
 
-void TabouSearch::buildTables(Graph *gr, int nbColors) {
-    int nbSommets = gr->nbSommets;
+void TabouSearch::buildTables(Graph *gr, int nbColors_) {
+    int nb_vertices = gr->nb_vertices;
     graph = gr;
-    this->nbColors = nbColors;
+    nbColors = nbColors_;
 
     // recherche Tabou
-    tConflicts = new int[nbSommets];
+    tConflicts = new int[nb_vertices];
 
-    tNbChanges = new double[nbSommets];
-    tNbConflicts = new double[nbSommets];
-    tTotalBestImprove = new double[nbSommets];
+    tNbChanges = new double[nb_vertices];
+    tNbConflicts = new double[nb_vertices];
+    tTotalBestImprove = new double[nb_vertices];
 
-    tNewConflitsWithColor = new int *[nbSommets];
-    for (int i = 0; i < nbSommets; i++) {
+    tNewConflitsWithColor = new int *[nb_vertices];
+    for (int i = 0; i < nb_vertices; i++) {
         tNewConflitsWithColor[i] = new int[nbColors];
     }
 
-    tTabou = new int *[nbSommets];
-    for (int i = 0; i < nbSommets; i++) {
+    tTabou = new int *[nb_vertices];
+    for (int i = 0; i < nb_vertices; i++) {
         tTabou[i] = new int[nbColors];
     }
 
@@ -83,24 +83,24 @@ void TabouSearch::buildTables(Graph *gr, int nbColors) {
     currentSol.computeConflicts(tConflicts);
 
     // optimisation1
-    tBestImprove = new int[nbSommets]; // valeur
-    tNbBestImprove = new int[nbSommets];
-    ttBestImproveColor = new int *[nbSommets]; // couleur
-    for (int i = 0; i < nbSommets; i++) {
+    tBestImprove = new int[nb_vertices]; // valeur
+    tNbBestImprove = new int[nb_vertices];
+    ttBestImproveColor = new int *[nb_vertices]; // couleur
+    for (int i = 0; i < nb_vertices; i++) {
         ttBestImproveColor[i] = new int[nbColors];
     }
 
     // optimisation2
-    tNodeWithConflict = new int[nbSommets];
-    tNodeAdded = new int[nbSommets];
+    tNodeWithConflict = new int[nb_vertices];
+    tNodeAdded = new int[nb_vertices];
 
     initNbChanges();
 }
 
 void TabouSearch::initNbChanges() {
-    int nbSommets = graph->nbSommets;
+    int nb_vertices = graph->nb_vertices;
     /// determine les delta-conflits pour chaque transition de couleur
-    for (int i = 0; i < nbSommets; i++) {
+    for (int i = 0; i < nb_vertices; i++) {
         tNbChanges[i] = 0.0;
         tNbConflicts[i] = 0;
         tTotalBestImprove[i] = 0;
@@ -108,17 +108,20 @@ void TabouSearch::initNbChanges() {
 }
 
 void TabouSearch::printNbChanges() {
-    int nbSommets = graph->nbSommets;
+    int nb_vertices = graph->nb_vertices;
     printf("\n");
-    for (int i = 0; i < nbSommets; i++) {
-        printf("%4d ", (int)tNbChanges[i]);
+    for (int i = 0; i < nb_vertices; i++) {
+        printf("%4d ", static_cast<int>(tNbChanges[i]));
     }
 }
 
-bool TabouSearch::compute(
-    Solution &sol, int nbLocalSearch, string baseName, int nbIter, int *tBlockedNode) {
+bool TabouSearch::compute(Solution &sol,
+                          int nbLocalSearch_,
+                          std::string baseName,
+                          int nbIter,
+                          int *tBlockedNode) {
     FILE *f = NULL;
-    this->nbLocalSearch = nbLocalSearch;
+    nbLocalSearch = nbLocalSearch_;
 
     analyseBaseName = baseName;
     if (baseName != "") {
@@ -128,7 +131,7 @@ bool TabouSearch::compute(
 
     bool found = false;
     currentSol = sol;
-    bestSol.nbEdgesConflict = bestSol.nbNodesConflict = graph->nbArretes + 1;
+    bestSol.nbEdgesConflict = bestSol.nbNodesConflict = graph->nb_edges + 1;
 
     currentSol.computeConflicts(tConflicts);
     initTables();
@@ -138,7 +141,7 @@ bool TabouSearch::compute(
 
     //// Si on doit bloquer des noeuds, on bloque la couleur spécifiée pour le noeud
     if (tBlockedNode != NULL)
-        for (int i = 0; i < graph->nbSommets; i++)
+        for (int i = 0; i < graph->nb_vertices; i++)
             if (tBlockedNode[i] >= 0)
                 tTabou[i][tBlockedNode[i]] = nbLocalSearch;
     ////
@@ -146,7 +149,7 @@ bool TabouSearch::compute(
         determineBestImprove();
         if (currentSol.nbEdgesConflict <=
             bestSol.nbEdgesConflict) { //// si <= : derniere meilleure rencontrée ; si < :
-                                       ///premiere meilleure
+                                       /// premiere meilleure
             if (currentSol.nbEdgesConflict < bestSol.nbEdgesConflict)
                 currentSol.nbIterationsFirst = nbIterations;
             bestSol = currentSol;
@@ -172,30 +175,30 @@ bool TabouSearch::compute(
 void TabouSearch::initTables() {
     initNbChanges();
 
-    int nbSommets = graph->nbSommets;
+    int nb_vertices = graph->nb_vertices;
     /// determine les delta-conflits pour chaque transition de couleur
-    for (int i = 0; i < nbSommets; i++) {
+    for (int i = 0; i < nb_vertices; i++) {
         int nbCurrentConflict = tConflicts[i];
         for (int j = 0; j < nbColors; j++) {
             tNewConflitsWithColor[i][j] = -nbCurrentConflict;
         }
 
-        int nbVoisins = graph->tVoisins[i].size();
-        for (int j = 0; j < nbVoisins; j++) {
-            tNewConflitsWithColor[i][currentSol.tColor[graph->tVoisins[i][j]]]++;
+        size_t nbVoisins = graph->neighborhood[i].size();
+        for (size_t j = 0; j < nbVoisins; j++) {
+            tNewConflitsWithColor[i][currentSol.tColor[graph->neighborhood[i][j]]]++;
         }
     }
 
     /// initialise les durées tabou
-    for (int i = 0; i < nbSommets; i++) {
+    for (int i = 0; i < nb_vertices; i++) {
         for (int j = 0; j < nbColors; j++) {
             tTabou[i][j] = -1;
         }
     }
 
     /// optimisation1: Determine les meilleures transition de chaque sommet
-    for (int i = 0; i < nbSommets; i++) {
-        int bestVal = graph->nbArretes + 1;
+    for (int i = 0; i < nb_vertices; i++) {
+        int bestVal = graph->nb_edges + 1;
         int nbBestVal = 0;
         for (int j = 0; j < nbColors; j++) {
             int val = tNewConflitsWithColor[i][j];
@@ -218,10 +221,10 @@ void TabouSearch::initTables() {
 
 void TabouSearch::resetNodeWithConflict() {
     nbNodeWithConflict = 0;
-    for (int i = 0; i < graph->nbSommets; i++)
+    for (int i = 0; i < graph->nb_vertices; i++)
         tNodeAdded[i] = 0;
 
-    for (int i = 0; i < graph->nbSommets; i++) {
+    for (int i = 0; i < graph->nb_vertices; i++) {
         if (tConflicts[i] > 0) {
             tNodeWithConflict[nbNodeWithConflict++] = i;
             tNodeAdded[i] = 1;
@@ -234,7 +237,7 @@ void TabouSearch::determineBestImprove() {
     nbIterations++;
     currentSol.nbIterations = nbIterations;
 
-    int bestVal = graph->nbArretes + 1;
+    int bestVal = graph->nb_edges + 1;
     int bestNode = -1;
     int bestColor = -1;
     int nbBestVal = 0;
@@ -269,7 +272,9 @@ void TabouSearch::determineBestImprove() {
                         nbBestVal = 1;
                     } else {
                         nbBestVal++;
-                        int val = (rand_r(&randSeed) / (double)RAND_MAX) * nbBestVal;
+                        int val = static_cast<int>(rand_r(&randSeed) /
+                                                   static_cast<double>(RAND_MAX)) *
+                                  nbBestVal;
                         if (val == 0) {
                             bestNode = i;
                             bestColor = currentCol;
@@ -297,7 +302,9 @@ void TabouSearch::determineBestImprove() {
                                  (tTabou[i][j] !=
                                   nbLocalSearch)))) { // on tire aleatoirement 1 des 2
                         nbBestVal++;
-                        int val = (rand_r(&randSeed) / (double)RAND_MAX) * nbBestVal;
+                        int val = static_cast<int>(rand_r(&randSeed) /
+                                                   static_cast<double>(RAND_MAX)) *
+                                  nbBestVal;
                         if (val == 0) {
                             bestVal = currentImprove;
                             bestNode = i;
@@ -323,9 +330,9 @@ void TabouSearch::updateTables(int node, int color) {
     tTabou[node][prevColor] =
         (int)(nbIterations + rd + lambda * currentSol.nbNodesConflict);
 
-    int nbVoisins = graph->tVoisins[node].size();
+    int nbVoisins = graph->neighborhood[node].size();
     for (int i = 0; i < nbVoisins; i++) {
-        int indiceSommet = graph->tVoisins[node][i];
+        int indiceSommet = graph->neighborhood[node][i];
 
         /// répercution sur les voisins
         if (currentSol.tColor[indiceSommet] == prevColor) {
@@ -404,7 +411,7 @@ void TabouSearch::updateTables(int node, int color) {
             } else {
                 ///
                 int nbBestVal = 0;
-                int bestVal = graph->nbArretes + 1;
+                int bestVal = graph->nb_edges + 1;
                 for (int j = 0; j < nbColors; j++) {
                     int val = tNewConflitsWithColor[indiceSommet][j];
                     if (val < bestVal) {
@@ -429,8 +436,8 @@ void TabouSearch::updateTables(int node, int color) {
 }
 
 void TabouSearch::updateAnalyseData() {
-    int nbSommets = graph->nbSommets;
-    for (int i = 0; i < nbSommets; i++) {
+    int nb_vertices = graph->nb_vertices;
+    for (int i = 0; i < nb_vertices; i++) {
         tNbConflicts[i] += tConflicts[i];
         tTotalBestImprove[i] += tBestImprove[i];
     }
@@ -438,11 +445,11 @@ void TabouSearch::updateAnalyseData() {
 
 void TabouSearch::saveAnalyse() {
     FILE *f = NULL;
-    int nbSommets = graph->nbSommets;
+    int nb_vertices = graph->nb_vertices;
 
     //// Nb Changes
     f = fopen((analyseBaseName + "NbChanges.xls").c_str(), "a");
-    for (int i = 0; i < nbSommets; i++) {
+    for (int i = 0; i < nb_vertices; i++) {
         fprintf(f, "%d ", (int)tNbChanges[i]);
     }
     fprintf(f, "\n");
@@ -450,7 +457,7 @@ void TabouSearch::saveAnalyse() {
 
     //// Nb Conflicts
     f = fopen((analyseBaseName + "NbConflicts.xls").c_str(), "a");
-    for (int i = 0; i < nbSommets; i++) {
+    for (int i = 0; i < nb_vertices; i++) {
         fprintf(f, "%d ", (int)tNbConflicts[i]);
     }
     fprintf(f, "\n");
@@ -458,7 +465,7 @@ void TabouSearch::saveAnalyse() {
 
     //// Best improvement per node
     f = fopen((analyseBaseName + "BestImprove.xls").c_str(), "a");
-    for (int i = 0; i < nbSommets; i++) {
+    for (int i = 0; i < nb_vertices; i++) {
         fprintf(f, "%d ", (int)tTotalBestImprove[i]);
     }
     fprintf(f, "\n");

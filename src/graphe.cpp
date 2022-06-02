@@ -1,104 +1,87 @@
-#include <cstring>
-
 #include "graphe.h"
 
-Graph::~Graph() {
-    for (int i = 0; i < nbSommets; i++) {
-        delete[] tConnect[i];
-    }
-    delete[] tConnect;
-    delete[] tVoisins;
+#include <fstream>
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Weffc++"
+#include <fmt/printf.h>
+#pragma GCC diagnostic pop
+
+Graph::Graph(const std::string &name_,
+             const int &nb_vertices_,
+             const int &nb_edges_,
+             const std::vector<std::pair<int, int>> &edges_list_,
+             const std::vector<std::vector<bool>> &adjacency_matrix_,
+             const std::vector<std::vector<int>> &neighborhood_,
+             const std::vector<int> &degrees_)
+    : name(name_),
+      nb_vertices(nb_vertices_),
+      nb_edges(nb_edges_),
+      edges_list(edges_list_),
+      adjacency_matrix(adjacency_matrix_),
+      neighborhood(neighborhood_),
+      degrees(degrees_) {
 }
 
-void Graph::loadGraph() {
-    GInputFile infile(filename);
-    infile.open();
+Graph *load_graph(const std::string &instance_name) {
+    // load the edges and vertices of the graph
+    std::ifstream file;
+    file.open("../instances/gcp_reduced/" + instance_name + ".col");
 
-    char *buf;
-    char *tok;
-    int nbArretesAjoutee = 0;
+    if (!file) {
+        fmt::print(stderr,
+                   "Didn't find {} in ../instances/wvcp_reduced/ or "
+                   "../instances/gcp_reduced/ (if problem == gcp)\n"
+                   "Did you run \n\n"
+                   "git submodule init\n"
+                   "git submodule update\n\n"
+                   "before executing the program ?(import instances)\n"
+                   "Otherwise check that you are in the build "
+                   "directory before executing the program\n",
+                   instance_name);
+        exit(1);
+    }
+    int nb_vertices{0}, nb_edges{0}, n1{0}, n2{0};
+    std::vector<std::pair<int, int>> edges_list;
+    std::string first;
+    file >> first;
+    while (!file.eof()) {
+        if (first == "e") {
+            file >> n1 >> n2;
+            edges_list.emplace_back(--n1, --n2);
+        } else if (first == "p") {
+            file >> first >> nb_vertices >> nb_edges;
+            edges_list.reserve(nb_edges);
+        } else {
+            getline(file, first);
+        }
+        file >> first;
+    }
+    file.close();
 
-    while ((buf = infile.readUncommentedLine())) {
-        tok = infile.getNextToken();
-        if (tok != NULL) {
-            if (tok && strcmp(tok, "nbVertices") == 0) { // lecture d'une arrete
-                loadMatrixGraph(infile);
-                infile.close();
-                buildVoisins();
-                return;
-            }
-
-            if (*tok == 'p') {               // lecture de la taille du graphe
-                tok = infile.getNextToken(); // pas interessant
-                tok = infile.getNextToken();
-                nbSommets = atoi(tok);
-                tok = infile.getNextToken();
-                nbArretes = atoi(tok);
-
-                // creation du graphe
-                tConnect = new char *[nbSommets];
-                for (int i = 0; i < nbSommets; i++) {
-                    tConnect[i] = new char[nbSommets];
-                    for (int j = 0; j < nbSommets; j++)
-                        tConnect[i][j] = 0;
-                }
-
-                // printf("Sommets ajoutes: %d\n", nbSommets);
-            }
-
-            if (*tok == 'e') { // lecture d'une arrete
-                tok = infile.getNextToken();
-                int v1 = atoi(tok);
-                tok = infile.getNextToken();
-                int v2 = atoi(tok);
-                tConnect[v1 - 1][v2 - 1] = 1;
-                tConnect[v2 - 1][v1 - 1] = 1;
-                nbArretesAjoutee++;
-            }
+    std::vector<std::vector<bool>> adjacency_matrix(
+        nb_vertices, std::vector<bool>(nb_vertices, false));
+    std::vector<std::vector<int>> neighborhood(nb_vertices, std::vector<int>(0));
+    std::vector<int> degrees(nb_vertices, 0);
+    // Init adjacency matrix and neighborhood of the vertices
+    for (auto p : edges_list) {
+        if (not adjacency_matrix[p.first][p.second]) {
+            adjacency_matrix[p.first][p.second] = true;
+            adjacency_matrix[p.second][p.first] = true;
+            neighborhood[p.first].push_back(p.second);
+            neighborhood[p.second].push_back(p.first);
+            ++nb_edges;
         }
     }
-
-    // printf("Arretes ajoutees: %d / %d\n",nbArretesAjoutee ,nbArretes);
-
-    infile.close();
-
-    buildVoisins();
-}
-
-void Graph::loadMatrixGraph(GInputFile &infile) {
-    printf("Debut de chargement d'un graphe matrice haute\n");
-    char *tok;
-    tok = infile.getNextToken();
-    nbSommets = atoi(tok);
-    nbArretes = 0;
-    printf("Sommets ajoutes: %d\n", nbSommets);
-
-    // creation du graphe
-    // creation du graphe
-
-    tConnect = new char *[nbSommets];
-    for (int i = 0; i < nbSommets; i++) {
-        tConnect[i] = new char[nbSommets];
+    // Init degrees_ of the vertices
+    for (int vertex{0}; vertex < nb_vertices; ++vertex) {
+        degrees[vertex] = static_cast<int>(neighborhood[vertex].size());
     }
-
-    for (int i = 0; i < nbSommets; i++) {
-        infile.readUncommentedLine();
-        for (int j = 0; j < nbSommets; j++) {
-            tok = infile.getNextToken(' ');
-            tConnect[i][j] = atoi(tok);
-            if (tConnect[i][j])
-                nbArretes++;
-        }
-    }
-    printf("Arretes ajoutees: %d\n", nbArretes);
-}
-
-void Graph::buildVoisins() {
-    tVoisins = new vector<int>[nbSommets];
-    for (int i = 0; i < nbSommets; i++) {
-        for (int j = 0; j < nbSommets; j++) {
-            if (tConnect[i][j])
-                tVoisins[i].push_back(j);
-        }
-    }
+    return new Graph(instance_name,
+                     nb_vertices,
+                     nb_edges,
+                     edges_list,
+                     adjacency_matrix,
+                     neighborhood,
+                     degrees);
 }

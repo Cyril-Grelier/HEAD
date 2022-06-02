@@ -1,5 +1,6 @@
-#ifndef SOLUTION_H
-#define SOLUTION_H
+#pragma once
+
+#include <limits>
 
 #include "graphe.h"
 
@@ -10,7 +11,8 @@ class Solution {
     Solution() {
         graph = NULL;
         tColor = NULL;
-        nbEdgesConflict = nbNodesConflict = nbIterations = nbIterationsFirst = 999999;
+        nbEdgesConflict = nbNodesConflict = std::numeric_limits<int>::max();
+        nbIterations = nbIterationsFirst = std::numeric_limits<unsigned long long>::max();
     }
     Solution(Graph *gr, int nbCol) {
         graph = gr;
@@ -32,18 +34,18 @@ class Solution {
     int computeConflicts();
     int proxi(Solution &sol, bool changeToBestMatching = false);
     int nbSameColor(Solution &sol);
-    void proxiIS(vector<Solution> &vSolRef,
-                 vector<int> &vProxi,
-                 vector<vector<pair<int, int>>> &vClosestRefSolIS);
+    void proxiIS(std::vector<Solution> &vSolRef,
+                 std::vector<int> &vProxi,
+                 std::vector<std::vector<std::pair<int, int>>> &vClosestRefSolIS);
     void proxiIS(Solution &solRef,
-                 vector<int> &vProxi,
-                 vector<int> &vClosestRefIS,
+                 std::vector<int> &vProxi,
+                 std::vector<int> &vClosestRefIS,
                  int nbColors1 = -1,
                  int nbColors2 = -1);
     void decresaseNbColors();
     void breakSymmetry();
     void print();
-    void save(string filename);
+    void save(std::string filename);
 
     int *tColor; // contient pour chaque noeud sa couleur
     int nbEdgesConflict;
@@ -52,5 +54,3 @@ class Solution {
     unsigned long long
         nbIterationsFirst; // nb d'iterations de la première fois qu'on la trouve
 };
-
-#endif

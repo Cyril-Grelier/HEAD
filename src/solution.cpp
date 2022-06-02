@@ -20,11 +20,11 @@ void Solution::initRandom(int nbCol) {
     }
 
     if (!tColor) {
-        tColor = new int[graph->nbSommets];
+        tColor = new int[graph->nb_vertices];
     }
 
-    for (int i = 0; i < graph->nbSommets; i++) {
-        tColor[i] = (rand() / (double)RAND_MAX) * nbCol;
+    for (int i = 0; i < graph->nb_vertices; i++) {
+        tColor[i] = static_cast<int>(rand() / static_cast<double>(RAND_MAX)) * nbCol;
     }
 
     nbIterations = nbIterationsFirst = nbNodesConflict = nbEdgesConflict = 999999;
@@ -36,8 +36,8 @@ Solution &Solution::operator=(const Solution &s) {
     nbEdgesConflict = s.nbEdgesConflict;
     nbNodesConflict = s.nbNodesConflict;
 
-    int nbSommets1 = graph ? graph->nbSommets : -1;
-    int nbSommets2 = s.graph ? s.graph->nbSommets : -1;
+    int nbSommets1 = graph ? graph->nb_vertices : -1;
+    int nbSommets2 = s.graph ? s.graph->nb_vertices : -1;
 
     graph = s.graph;
 
@@ -66,16 +66,16 @@ void Solution::computeConflicts(int tConflicts[]) {
         exit(-1);
     }
 
-    int nbSommets = graph->nbSommets;
+    int nb_vertices = graph->nb_vertices;
 
     nbNodesConflict = 0;
     nbEdgesConflict = 0;
-    for (int i = 0; i < nbSommets; i++)
+    for (int i = 0; i < nb_vertices; i++)
         tConflicts[i] = 0;
 
-    for (int i = 0; i < nbSommets; i++) {
-        for (int j = i; j < nbSommets; j++) {
-            if (graph->tConnect[i][j] && tColor[i] == tColor[j]) {
+    for (int i = 0; i < nb_vertices; i++) {
+        for (int j = i; j < nb_vertices; j++) {
+            if (graph->adjacency_matrix[i][j] && tColor[i] == tColor[j]) {
                 tConflicts[i]++;
                 tConflicts[j]++;
                 nbEdgesConflict++;
@@ -94,14 +94,14 @@ int Solution::computeConflicts() {
         exit(-1);
     }
 
-    int nbSommets = graph->nbSommets;
-    vector<bool> vNodeConf(nbSommets, false);
+    int nb_vertices = graph->nb_vertices;
+    vector<bool> vNodeConf(nb_vertices, false);
 
     nbNodesConflict = nbEdgesConflict = 0;
 
-    for (int i = 0; i < nbSommets - 1; i++) {
-        for (int j = i + 1; j < nbSommets; j++) {
-            if (graph->tConnect[i][j] && tColor[i] == tColor[j]) {
+    for (int i = 0; i < nb_vertices - 1; i++) {
+        for (int j = i + 1; j < nb_vertices; j++) {
+            if (graph->adjacency_matrix[i][j] && tColor[i] == tColor[j]) {
                 nbEdgesConflict++;
                 if (!vNodeConf[i])
                     nbNodesConflict++;
@@ -123,7 +123,7 @@ int Solution::proxi(Solution &sol, bool changeToBestMatching) {
     int proxi = 0;
     int nbColors = 0;
 
-    for (int i = 0; i < graph->nbSommets; i++) {
+    for (int i = 0; i < graph->nb_vertices; i++) {
         if (tColor[i] > nbColors)
             nbColors = tColor[i];
         if (sol.tColor[i] > nbColors)
@@ -132,16 +132,10 @@ int Solution::proxi(Solution &sol, bool changeToBestMatching) {
 
     nbColors++;
 
-    int ttNbSameColor[nbColors][nbColors]; // pour identifier les meilleurs correspondance
-                                           // de couleurs
+    // pour identifier les meilleurs correspondance de couleurs
+    std::vector<std::vector<int>> ttNbSameColor(nbColors, std::vector<int>(nbColors, 0));
 
-    for (int i = 0; i < nbColors; i++) {
-        for (int j = 0; j < nbColors; j++) {
-            ttNbSameColor[i][j] = 0;
-        }
-    }
-
-    for (int i = 0; i < graph->nbSommets; i++)
+    for (int i = 0; i < graph->nb_vertices; i++)
         ttNbSameColor[tColor[i]][sol.tColor[i]]++;
 
     vector<int> vCorrespondingColor(nbColors, 0);
@@ -167,7 +161,7 @@ int Solution::proxi(Solution &sol, bool changeToBestMatching) {
     }
 
     if (changeToBestMatching) {
-        for (int i = 0; i < graph->nbSommets; i++)
+        for (int i = 0; i < graph->nb_vertices; i++)
             tColor[i] = vCorrespondingColor[tColor[i]];
     }
 
@@ -177,7 +171,7 @@ int Solution::proxi(Solution &sol, bool changeToBestMatching) {
 // compte le nombre de sommets ayant la même couleur
 int Solution::nbSameColor(Solution &sol) {
     int proxi = 0;
-    for (int i = 0; i < graph->nbSommets; i++) {
+    for (int i = 0; i < graph->nb_vertices; i++) {
         if (tColor[i] == sol.tColor[i])
             proxi++;
     }
@@ -195,7 +189,7 @@ void Solution::proxiIS(vector<Solution> &vSolRef,
     /// compte le nombre de couleurs
     int nbColors1 = 0, nbColors2 = 0;
     Solution &sol = vSolRef[0];
-    for (int i = 0; i < graph->nbSommets; i++) {
+    for (int i = 0; i < graph->nb_vertices; i++) {
         if (tColor[i] > nbColors1)
             nbColors1 = tColor[i];
         if (sol.tColor[i] > nbColors2)
@@ -239,14 +233,14 @@ void Solution::proxiIS(Solution &solRef,
     /// Determination si besoin du nombre de couleurs
     if (nbColors1 < 0) {
         nbColors1 = 0;
-        for (int i = 0; i < graph->nbSommets; i++)
+        for (int i = 0; i < graph->nb_vertices; i++)
             if (tColor[i] > nbColors1)
                 nbColors1 = tColor[i];
         nbColors1++;
     }
     if (nbColors2 < 0) {
         nbColors2 = 0;
-        for (int i = 0; i < graph->nbSommets; i++)
+        for (int i = 0; i < graph->nb_vertices; i++)
             if (solRef.tColor[i] > nbColors2)
                 nbColors2 = solRef.tColor[i];
         nbColors2++;
@@ -256,16 +250,11 @@ void Solution::proxiIS(Solution &solRef,
     for (int i = 0; i < nbColors1; i++) {
         vClosestRefIS[i] = -1;
     }
+    // pour identifier les meilleurs correspondance de couleurs
+    std::vector<std::vector<int>> ttNbSameColor(nbColors1,
+                                                std::vector<int>(nbColors2, 0));
 
-    int ttNbSameColor[nbColors1][nbColors2]; // pour identifier les meilleurs
-                                             // correspondance de couleurs
-    for (int i = 0; i < nbColors1; i++) {
-        for (int j = 0; j < nbColors2; j++) {
-            ttNbSameColor[i][j] = 0;
-        }
-    }
-
-    for (int i = 0; i < graph->nbSommets; i++)
+    for (int i = 0; i < graph->nb_vertices; i++)
         ttNbSameColor[tColor[i]][solRef.tColor[i]]++;
 
     for (int i = 0; i < nbColors1; i++) {
@@ -286,18 +275,19 @@ void Solution::proxiIS(Solution &solRef,
 void Solution::decresaseNbColors() {
     /// Determination du nombre de couleurs
     int nbColors = 0;
-    for (int i = 0; i < graph->nbSommets; i++)
+    for (int i = 0; i < graph->nb_vertices; i++)
         if (tColor[i] > nbColors)
             nbColors = tColor[i];
     // nbColors contient la couleur max courante, donc le nb de couleurs cible
 
-    int nbSommets = graph->nbSommets;
+    int nb_vertices = graph->nb_vertices;
     // int colToRemove = rand()/(double)RAND_MAX * (nbColors+1); // on eneleve une couleur
     // au hazard
     int colToRemove = nbColors; // on enleve la dernière couleur
-    for (int i = 0; i < nbSommets; i++) {
+    for (int i = 0; i < nb_vertices; i++) {
         if (tColor[i] == colToRemove)
-            tColor[i] = rand() / (double)RAND_MAX * nbColors;
+            tColor[i] =
+                static_cast<int>(rand() / static_cast<double>(RAND_MAX)) * nbColors;
         else if (tColor[i] > colToRemove)
             tColor[i]--;
     }
@@ -307,11 +297,11 @@ void Solution::decresaseNbColors() {
     soient appribuées aux sommets de plus petit indice
 */
 void Solution::breakSymmetry() {
-    int *swap = new int[graph->nbSommets];
+    int *swap = new int[graph->nb_vertices];
     int color_curent = 0;
-    for (int i = 0; i < graph->nbSommets; i++)
+    for (int i = 0; i < graph->nb_vertices; i++)
         swap[i] = -1;
-    for (int i = 0; i < graph->nbSommets; i++) {
+    for (int i = 0; i < graph->nb_vertices; i++) {
         if (swap[tColor[i]] == -1) {
             swap[tColor[i]] = color_curent;
             tColor[i] = color_curent;
@@ -323,7 +313,7 @@ void Solution::breakSymmetry() {
 }
 
 void Solution::print() {
-    for (int i = 0; i < graph->nbSommets; i++) {
+    for (int i = 0; i < graph->nb_vertices; i++) {
         printf("%d ", tColor[i]);
     }
     printf("\n");
@@ -333,7 +323,7 @@ void Solution::save(string filename) {
     FILE *f;
     f = fopen(filename.c_str(), "a");
 
-    for (int i = 0; i < graph->nbSommets; i++) {
+    for (int i = 0; i < graph->nb_vertices; i++) {
         fprintf(f, "%d\t", tColor[i]);
     }
     fprintf(f, "\n");

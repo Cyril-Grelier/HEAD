@@ -42,17 +42,17 @@ class TabouSearch {
     /////
     void updateAnalyseData();
     void saveAnalyse();
-    string analyseBaseName; // contient le chemin de sortie pour les analyses (chaine vide
-                            // => pas d'analsye)
-                            /////
+    // contient le chemin de sortie pour les analyses (chaine vide => pas d'analsye)
+    std::string analyseBaseName;
+    /////
 
   public:
     TabouSearch();
     TabouSearch(const TabouSearch &ts) {
         *this = ts;
     }
-    TabouSearch(Graph *gr, int nbColors) {
-        buildTables(gr, nbColors);
+    TabouSearch(Graph *gr, int nbColors_) {
+        buildTables(gr, nbColors_);
     }
     ~TabouSearch();
     TabouSearch &operator=(const TabouSearch &ts);
@@ -63,7 +63,7 @@ class TabouSearch {
     bool
     compute(Solution &sol,
             int nbLocalSearch,
-            string outfilename = "",
+            std::string outfilename = "",
             int nbIte = -1,
             int *tBlockedNode =
                 NULL); // améliore la solution sol en effectuant nbLocalSearch iterations
