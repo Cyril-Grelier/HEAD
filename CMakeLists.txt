@@ -12,11 +12,10 @@ find_package(OpenMP REQUIRED)
 
 add_executable(${CMAKE_PROJECT_NAME}
         src/main.cpp
-        src/graphe.cpp src/graphe.h
+        src/graph.cpp src/graph.h
         src/head.cpp src/head.h
         src/solution.cpp src/solution.h
         src/tabouSearch.cpp src/tabouSearch.h
-        src/util/gfile.cpp src/util/gfile.h
         )
 
 set_property(TARGET ${CMAKE_PROJECT_NAME} PROPERTY CXX_STANDARD 17)

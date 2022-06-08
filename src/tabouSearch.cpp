@@ -1,473 +1,303 @@
 #include "tabouSearch.h"
-#include <iostream>
-#include <math.h>
-#include <stdio.h>
-#include <stdlib.h>
 
-using namespace std;
+int tabu_search(Solution &best_solution, int nb_turn, unsigned int randSeed) {
+    const int nb_vertices{Graph::g->nb_vertices};
+    const int nb_colors{Graph::g->nb_colors};
 
-TabouSearch::TabouSearch() {
-    graph = NULL;
-    tNewConflitsWithColor = tTabou = ttBestImproveColor = NULL;
-    tConflicts = tBestImprove = tNbBestImprove = tNodeWithConflict = tNodeAdded = NULL;
-    tNbChanges = NULL;
-    tNbConflicts = NULL;
-    tTotalBestImprove = NULL;
-    nbColors = nbNodeWithConflict = -1;
-}
+    // solution qui évolue lors de la recherche Tabou
+    Solution solution = best_solution;
 
-TabouSearch::~TabouSearch() {
-    if (graph) {
-        int nb_vertices = graph->nb_vertices;
-        delete[] tConflicts;
-        delete[] tNbChanges;
-        delete[] tNbConflicts;
-        delete[] tTotalBestImprove;
+    // contient pour chaque sommet le nombre de conflits
+    std::vector<int> nb_conflicts(nb_vertices, 0);
 
-        for (int i = 0; i < nb_vertices; i++) {
-            delete[] tNewConflitsWithColor[i];
-        }
-        delete[] tNewConflitsWithColor;
+    // TODO should be already computed in solution
+    solution.computeConflicts(nb_conflicts);
 
-        for (int i = 0; i < nb_vertices; i++) {
-            delete[] tTabou[i];
-        }
-        delete[] tTabou;
+    // contient pour chaque noeud ne nb de conflits en plus ou
+    // moins si changement vers chaque couleur, suivi de la
+    // meilleure couleur et meilleur gain associé
+    std::vector<std::vector<int>> conflicts_colors(nb_vertices,
+                                                   std::vector<int>(nb_colors, 0));
 
-        // optimisation1
-        delete[] tBestImprove;
-        delete[] tNbBestImprove;
-        for (int i = 0; i < nb_vertices; i++) {
-            delete[] ttBestImproveColor[i];
-        }
-        delete[] ttBestImproveColor;
-
-        // optimisation2
-        delete[] tNodeWithConflict;
-        delete[] tNodeAdded;
-    }
-}
-
-TabouSearch &TabouSearch::operator=(const TabouSearch &ts) {
-    tNewConflitsWithColor = tTabou = ttBestImproveColor = NULL;
-    tConflicts = tBestImprove = tNbBestImprove = tNodeWithConflict = tNodeAdded = NULL;
-
-    if (ts.graph)
-        buildTables(ts.graph, ts.nbColors);
-    return *this;
-}
-
-void TabouSearch::buildTables(Graph *gr, int nbColors_) {
-    int nb_vertices = gr->nb_vertices;
-    graph = gr;
-    nbColors = nbColors_;
-
-    // recherche Tabou
-    tConflicts = new int[nb_vertices];
-
-    tNbChanges = new double[nb_vertices];
-    tNbConflicts = new double[nb_vertices];
-    tTotalBestImprove = new double[nb_vertices];
-
-    tNewConflitsWithColor = new int *[nb_vertices];
-    for (int i = 0; i < nb_vertices; i++) {
-        tNewConflitsWithColor[i] = new int[nbColors];
-    }
-
-    tTabou = new int *[nb_vertices];
-    for (int i = 0; i < nb_vertices; i++) {
-        tTabou[i] = new int[nbColors];
-    }
-
-    currentSol = Solution(gr, nbColors);
-    currentSol.computeConflicts(tConflicts);
-
-    // optimisation1
-    tBestImprove = new int[nb_vertices]; // valeur
-    tNbBestImprove = new int[nb_vertices];
-    ttBestImproveColor = new int *[nb_vertices]; // couleur
-    for (int i = 0; i < nb_vertices; i++) {
-        ttBestImproveColor[i] = new int[nbColors];
-    }
-
-    // optimisation2
-    tNodeWithConflict = new int[nb_vertices];
-    tNodeAdded = new int[nb_vertices];
-
-    initNbChanges();
-}
-
-void TabouSearch::initNbChanges() {
-    int nb_vertices = graph->nb_vertices;
     /// determine les delta-conflits pour chaque transition de couleur
-    for (int i = 0; i < nb_vertices; i++) {
-        tNbChanges[i] = 0.0;
-        tNbConflicts[i] = 0;
-        tTotalBestImprove[i] = 0;
-    }
-}
-
-void TabouSearch::printNbChanges() {
-    int nb_vertices = graph->nb_vertices;
-    printf("\n");
-    for (int i = 0; i < nb_vertices; i++) {
-        printf("%4d ", static_cast<int>(tNbChanges[i]));
-    }
-}
-
-bool TabouSearch::compute(Solution &sol,
-                          int nbLocalSearch_,
-                          std::string baseName,
-                          int nbIter,
-                          int *tBlockedNode) {
-    FILE *f = NULL;
-    nbLocalSearch = nbLocalSearch_;
-
-    analyseBaseName = baseName;
-    if (baseName != "") {
-        f = fopen((baseName + "TabouFitness.xls").c_str(), "a");
-        fprintf(f, "\nIter%d ", nbIter);
-    }
-
-    bool found = false;
-    currentSol = sol;
-    bestSol.nbEdgesConflict = bestSol.nbNodesConflict = graph->nb_edges + 1;
-
-    currentSol.computeConflicts(tConflicts);
-    initTables();
-    nbIterations = 0;
-
-    initNbChanges();
-
-    //// Si on doit bloquer des noeuds, on bloque la couleur spécifiée pour le noeud
-    if (tBlockedNode != NULL)
-        for (int i = 0; i < graph->nb_vertices; i++)
-            if (tBlockedNode[i] >= 0)
-                tTabou[i][tBlockedNode[i]] = nbLocalSearch;
-    ////
-    for (int i = 0; i < nbLocalSearch && currentSol.nbEdgesConflict > 0; i++) {
-        determineBestImprove();
-        if (currentSol.nbEdgesConflict <=
-            bestSol.nbEdgesConflict) { //// si <= : derniere meilleure rencontrée ; si < :
-                                       /// premiere meilleure
-            if (currentSol.nbEdgesConflict < bestSol.nbEdgesConflict)
-                currentSol.nbIterationsFirst = nbIterations;
-            bestSol = currentSol;
+    for (int vertex = 0; vertex < nb_vertices; vertex++) {
+        for (int color = 0; color < nb_colors; color++) {
+            conflicts_colors[vertex][color] = -nb_conflicts[vertex];
         }
-
-        if (f) { /// pour analyse
-            fprintf(f, "%d ", currentSol.nbEdgesConflict);
-            updateAnalyseData();
+        for (const auto &neighbor : Graph::g->neighborhood[vertex]) {
+            conflicts_colors[vertex][solution._colors[neighbor]]++;
         }
     }
 
-    if (baseName != "") {
-        fclose(f);
-        saveAnalyse();
-    }
+    // optimisation1 permettant de connaître la meilleure amélioration possible pour
+    // chaque noeud
 
-    if (bestSol.nbEdgesConflict == 0)
-        found = true;
-    sol = bestSol;
-    return found;
-}
+    // contient pour chaque sommet la meilleure valeur de transition
+    std::vector<int> best_improve_conflicts(nb_vertices, 0);
 
-void TabouSearch::initTables() {
-    initNbChanges();
+    // contient pour chaque sommet la meilleure transition de
+    // couleur (-1 si plusieurs équivalentes => stratégie classique)
+    std::vector<std::vector<int>> best_improve_color(nb_vertices,
+                                                     std::vector<int>(nb_colors, 0));
 
-    int nb_vertices = graph->nb_vertices;
-    /// determine les delta-conflits pour chaque transition de couleur
-    for (int i = 0; i < nb_vertices; i++) {
-        int nbCurrentConflict = tConflicts[i];
-        for (int j = 0; j < nbColors; j++) {
-            tNewConflitsWithColor[i][j] = -nbCurrentConflict;
-        }
-
-        size_t nbVoisins = graph->neighborhood[i].size();
-        for (size_t j = 0; j < nbVoisins; j++) {
-            tNewConflitsWithColor[i][currentSol.tColor[graph->neighborhood[i][j]]]++;
-        }
-    }
-
-    /// initialise les durées tabou
-    for (int i = 0; i < nb_vertices; i++) {
-        for (int j = 0; j < nbColors; j++) {
-            tTabou[i][j] = -1;
-        }
-    }
+    // contient le nombre pour chaque sommet de couleurs fournissant
+    // la meilleure amélioration
+    std::vector<int> nb_best_improve(nb_vertices, 0);
 
     /// optimisation1: Determine les meilleures transition de chaque sommet
-    for (int i = 0; i < nb_vertices; i++) {
-        int bestVal = graph->nb_edges + 1;
-        int nbBestVal = 0;
-        for (int j = 0; j < nbColors; j++) {
-            int val = tNewConflitsWithColor[i][j];
-            if (val < bestVal) {
-                nbBestVal = 0;
-                bestVal = val;
+    for (int vertex = 0; vertex < nb_vertices; vertex++) {
+        int best_conflicts = Graph::g->nb_edges + 1;
+        int nb_best_value = 0;
+        for (int color = 0; color < nb_colors; color++) {
+            const int conflicts = conflicts_colors[vertex][color];
+            if (conflicts < best_conflicts) {
+                nb_best_value = 0;
+                best_conflicts = conflicts;
             }
-
-            if (val <= bestVal) {
-                ttBestImproveColor[i][nbBestVal++] = j;
+            if (conflicts <= best_conflicts) {
+                best_improve_color[vertex][nb_best_value++] = color;
             }
         }
-        tBestImprove[i] = bestVal;
-        tNbBestImprove[i] = nbBestVal;
+        best_improve_conflicts[vertex] = best_conflicts;
+        nb_best_improve[vertex] = nb_best_value;
     }
 
-    /// optimisation2: Determination des noeuds avec conflict (par défaut tous les noeuds)
-    resetNodeWithConflict();
-}
+    /// optimisation2: Determination des noeuds avec conflict (par défaut tous les
+    /// noeuds)
 
-void TabouSearch::resetNodeWithConflict() {
-    nbNodeWithConflict = 0;
-    for (int i = 0; i < graph->nb_vertices; i++)
-        tNodeAdded[i] = 0;
+    // optimisation2 permettant de parcourir uniquement les noeuds avec conflits
 
-    for (int i = 0; i < graph->nb_vertices; i++) {
-        if (tConflicts[i] > 0) {
-            tNodeWithConflict[nbNodeWithConflict++] = i;
-            tNodeAdded[i] = 1;
+    // contient les noeuds avec conflit pour ne pas tout parcourir
+    std::vector<int> conflicting_nodes(nb_vertices, 0); // TODO should be a set
+    int nb_conflicting_nodes{0};
+    // permet de ne pas ajouter 2 fois le meme noeud
+    std::vector<bool> node_added(nb_vertices, false);
+
+    for (int vertex = 0; vertex < nb_vertices; vertex++) {
+        if (nb_conflicts[vertex] > 0) {
+            conflicting_nodes[nb_conflicting_nodes++] = vertex;
+            node_added[vertex] = true;
         }
     }
-}
 
-void TabouSearch::determineBestImprove() {
-    /// choisit aléatoirement parmis les meilleurs noeuds
-    nbIterations++;
-    currentSol.nbIterations = nbIterations;
+    // initTables end
 
-    int bestVal = graph->nb_edges + 1;
-    int bestNode = -1;
-    int bestColor = -1;
-    int nbBestVal = 0;
+    // contient pour chaque noeud et chaque couleur la fin de la période taboue
+    std::vector<std::vector<int>> tabu_matrix(nb_vertices,
+                                              std::vector<int>(nb_colors, -1));
+    int turn;
+    for (turn = 0; turn < nb_turn && solution._penalty > 0; turn++) {
 
-    //    int debut=rand()/(double)RAND_MAX * nbNodeWithConflict; // on démarre de
-    //    n'importe quel sommet et on prend le meilleur strict. for(int ind=0;
-    //    ind<nbNodeWithConflict; ind++){
-    //        int i=tNodeWithConflict[(debut+ind)%nbNodeWithConflict];
-    for (int ind = 0; ind < nbNodeWithConflict; ind++) {
-        int i = tNodeWithConflict[ind];
+        solution.nbIterations = turn;
 
-        if (tConflicts[i] > 0 && tBestImprove[i] <= bestVal) {
-            int color = currentSol.tColor[i];
-            int currentBestImprove = tBestImprove[i];
-            int currentNbBestImprove = tNbBestImprove[i];
-            int added =
-                0; /// permet de savoir si on a reussi à ajouter une valeure (1=true)
+        int best_nb_conflicts = Graph::g->nb_edges + 1;
+        int best_vertex = -1;
+        int best_color = -1;
+        int nb_best_nb_conflicts = 0;
 
-            for (int j = 0; j < currentNbBestImprove; j++) {
-                int currentCol = ttBestImproveColor[i][j];
+        for (int ind = 0; ind < nb_conflicting_nodes; ind++) {
+            int vertex = conflicting_nodes[ind];
 
-                if ((currentCol != color) &&
-                    ((tTabou[i][currentCol] < nbIterations) ||
-                     (((currentBestImprove + currentSol.nbEdgesConflict) <
-                       bestSol.nbEdgesConflict) &&
-                      (tTabou[i][currentCol] != nbLocalSearch)))) {
-                    added = 1;
-                    if (currentBestImprove < bestVal) {
-                        bestVal = currentBestImprove;
-                        bestNode = i;
-                        bestColor = currentCol;
-                        nbBestVal = 1;
+            if (nb_conflicts[vertex] == 0 or
+                best_improve_conflicts[vertex] > best_nb_conflicts) {
+                continue;
+            }
+
+            const int current_color = solution._colors[vertex];
+            const int current_best_improve = best_improve_conflicts[vertex];
+            const int current_nb_best_improve = nb_best_improve[vertex];
+            /// permet de savoir si on a réussi à ajouter une valeur (1=true)
+            int added = 0;
+
+            for (int ind_col = 0; ind_col < current_nb_best_improve; ind_col++) {
+                int color = best_improve_color[vertex][ind_col];
+
+                const bool vertex_not_tabu{(tabu_matrix[vertex][color] < turn)};
+                const bool improve_best_solution{
+                    (((current_best_improve + solution._penalty) <
+                      best_solution._penalty))};
+                // and (tabu_matrix[vertex][color] != nb_turn)
+
+                if ((color == current_color) or
+                    not(vertex_not_tabu or improve_best_solution)) {
+                    continue;
+                }
+
+                added = 1;
+                if (current_best_improve < best_nb_conflicts) {
+                    best_nb_conflicts = current_best_improve;
+                    best_vertex = vertex;
+                    best_color = color;
+                    nb_best_nb_conflicts = 1;
+                } else {
+                    nb_best_nb_conflicts++;
+                    int val = static_cast<int>(rand_r(&randSeed) /
+                                               static_cast<double>(RAND_MAX)) *
+                              nb_best_nb_conflicts;
+                    if (val == 0) {
+                        best_vertex = vertex;
+                        best_color = color;
+                    }
+                }
+            }
+
+            if (current_best_improve < best_nb_conflicts && added == 0) {
+                /// on doit tout vérifier
+                for (int color = 0; color < nb_colors; color++) {
+                    if (color == current_color) {
+                        continue;
+                    }
+
+                    const int conflicts = conflicts_colors[vertex][color];
+                    const bool vertex_not_tabu{(tabu_matrix[vertex][color] < turn)};
+                    const bool improve_best_solution{
+                        (((conflicts + solution._penalty) < best_solution._penalty))};
+
+                    if ((conflicts < best_nb_conflicts) and
+                        (vertex_not_tabu or improve_best_solution)) {
+                        best_nb_conflicts = conflicts;
+                        best_vertex = vertex;
+                        best_color = color;
+                        nb_best_nb_conflicts = 1;
+                    } else if ((conflicts == best_nb_conflicts) and
+                               (vertex_not_tabu or improve_best_solution)) {
+                        // on tire aléatoirement 1 des 2
+                        nb_best_nb_conflicts++;
+                        int val = static_cast<int>(rand_r(&randSeed) /
+                                                   static_cast<double>(RAND_MAX)) *
+                                  nb_best_nb_conflicts;
+                        if (val == 0) {
+                            best_nb_conflicts = conflicts;
+                            best_vertex = vertex;
+                            best_color = color;
+                        }
+                    }
+                }
+            }
+        }
+        if (best_vertex > -1) {
+            // updateTables(int best_vertex, int best_color)
+            int last_color = solution._colors[best_vertex];
+            solution._colors[best_vertex] = best_color;
+
+            tabu_matrix[best_vertex][last_color] =
+                static_cast<int>(turn + ((rand_r(&randSeed) / (double)RAND_MAX) * 10) +
+                                 0.6 * solution.nb_conflicting_vertices);
+
+            for (const auto &neighbor : Graph::g->neighborhood[best_vertex]) {
+                /// répercutions sur les voisins
+                if (solution._colors[neighbor] == last_color) {
+                    nb_conflicts[neighbor]--;
+                    nb_conflicts[best_vertex]--;
+                    solution._penalty--;
+                    if (nb_conflicts[neighbor] == 0)
+                        solution.nb_conflicting_vertices--;
+                    if (nb_conflicts[best_vertex] == 0)
+                        solution.nb_conflicting_vertices--;
+
+                    for (int color = 0; color < nb_colors; color++) {
+                        conflicts_colors[neighbor][color]++;
+                        conflicts_colors[best_vertex][color]++;
+                    }
+                    best_improve_conflicts[neighbor]++;
+                    best_improve_conflicts[best_vertex]++;
+                } else if (solution._colors[neighbor] == best_color) {
+                    nb_conflicts[neighbor]++;
+                    nb_conflicts[best_vertex]++;
+                    solution._penalty++;
+                    if (nb_conflicts[neighbor] == 1) {
+                        solution.nb_conflicting_vertices++;
+                        if (node_added[neighbor] != 1) {
+                            node_added[neighbor] = 1;
+                            conflicting_nodes[nb_conflicting_nodes++] = neighbor;
+                        }
+                    }
+                    if (nb_conflicts[best_vertex] == 1) {
+                        solution.nb_conflicting_vertices++;
+                        if (node_added[best_vertex] != 1) {
+                            node_added[best_vertex] = 1;
+                            conflicting_nodes[nb_conflicting_nodes++] = best_vertex;
+                        }
+                    }
+                    for (int color = 0; color < nb_colors; color++) {
+                        conflicts_colors[neighbor][color]--;
+                        conflicts_colors[best_vertex][color]--;
+                    }
+                    best_improve_conflicts[neighbor]--;
+                    best_improve_conflicts[best_vertex]--;
+                }
+
+                conflicts_colors[neighbor][last_color]--;
+                conflicts_colors[neighbor][best_color]++;
+
+                //// ajout pour garder la meilleur transition
+                const int best_improve = best_improve_conflicts[neighbor];
+
+                if (conflicts_colors[neighbor][last_color] < best_improve) {
+                    best_improve_conflicts[neighbor]--;
+                    best_improve_color[neighbor][0] = last_color;
+                    nb_best_improve[neighbor] = 1;
+                } else if (conflicts_colors[neighbor][last_color] == best_improve) {
+                    best_improve_color[neighbor][nb_best_improve[neighbor]] = last_color;
+                    nb_best_improve[neighbor]++;
+                }
+
+                if ((conflicts_colors[neighbor][best_color] - 1) == best_improve) {
+                    // si c'était le meilleur
+                    const int nbBestImprove = nb_best_improve[neighbor];
+                    if (nbBestImprove > 1) {
+                        nb_best_improve[neighbor]--;
+                        int pos = 0;
+                        bool found = false;
+                        for (pos = 0; found != 1; pos++) {
+                            if (best_improve_color[neighbor][pos] == best_color)
+                                found = true;
+                        }
+
+                        for (pos = pos; pos < nbBestImprove; pos++) {
+                            best_improve_color[neighbor][pos - 1] =
+                                best_improve_color[neighbor][pos];
+                        }
                     } else {
-                        nbBestVal++;
-                        int val = static_cast<int>(rand_r(&randSeed) /
-                                                   static_cast<double>(RAND_MAX)) *
-                                  nbBestVal;
-                        if (val == 0) {
-                            bestNode = i;
-                            bestColor = currentCol;
+                        int bestVal_ = Graph::g->nb_edges + 1;
+                        int nbBestVal_ = 0;
+                        for (int color = 0; color < nb_colors; color++) {
+                            const int conflicts = conflicts_colors[neighbor][color];
+                            if (conflicts < bestVal_) {
+                                bestVal_ = conflicts;
+                                best_improve_color[neighbor][0] = color;
+                                nbBestVal_ = 1;
+                            } else if (conflicts == bestVal_) {
+                                best_improve_color[neighbor][nbBestVal_] = color;
+                                nbBestVal_++;
+                            }
                         }
+                        best_improve_conflicts[neighbor] = bestVal_;
+                        nb_best_improve[neighbor] = nbBestVal_;
                     }
                 }
             }
 
-            if (currentBestImprove < bestVal && added == 0) { /// on doit tout vérifier
-                for (int j = 0; j < nbColors; j++) {
-                    int currentImprove = tNewConflitsWithColor[i][j];
-                    if ((currentImprove < bestVal) && (j != color) &&
-                        ((tTabou[i][j] < nbIterations) ||
-                         (((currentImprove + currentSol.nbEdgesConflict) <
-                           bestSol.nbEdgesConflict) &&
-                          (tTabou[i][j] != nbLocalSearch)))) {
-                        bestVal = currentImprove;
-                        bestNode = i;
-                        bestColor = j;
-                        nbBestVal = 1;
-                    } else if ((currentImprove == bestVal) && (j != color) &&
-                               ((tTabou[i][j] < nbIterations) ||
-                                (((currentImprove + currentSol.nbEdgesConflict) <
-                                  bestSol.nbEdgesConflict) &&
-                                 (tTabou[i][j] !=
-                                  nbLocalSearch)))) { // on tire aleatoirement 1 des 2
-                        nbBestVal++;
-                        int val = static_cast<int>(rand_r(&randSeed) /
-                                                   static_cast<double>(RAND_MAX)) *
-                                  nbBestVal;
-                        if (val == 0) {
-                            bestVal = currentImprove;
-                            bestNode = i;
-                            bestColor = j;
-                        }
+            if (turn % 100 == 0) {
+                // arbitrairement tous les 100 on recalcule les noeuds avec conflit
+                nb_conflicting_nodes = 0;
+                std::fill(node_added.begin(), node_added.end(), false);
+
+                for (int vertex = 0; vertex < nb_vertices; vertex++) {
+                    if (nb_conflicts[vertex] > 0) {
+                        conflicting_nodes[nb_conflicting_nodes++] = vertex;
+                        node_added[vertex] = true;
                     }
                 }
+                // recalcule pour optimisation2
             }
         }
-    }
-    if (bestNode > -1) {
-        updateTables(bestNode, bestColor);
-    }
-}
-
-void TabouSearch::updateTables(int node, int color) {
-    tNbChanges[node]++;
-    int prevColor = currentSol.tColor[node];
-    currentSol.tColor[node] = color;
-
-    int rd = (rand_r(&randSeed) / (double)RAND_MAX) * L;
-
-    tTabou[node][prevColor] =
-        (int)(nbIterations + rd + lambda * currentSol.nbNodesConflict);
-
-    int nbVoisins = graph->neighborhood[node].size();
-    for (int i = 0; i < nbVoisins; i++) {
-        int indiceSommet = graph->neighborhood[node][i];
-
-        /// répercution sur les voisins
-        if (currentSol.tColor[indiceSommet] == prevColor) {
-            tConflicts[indiceSommet]--;
-            tConflicts[node]--;
-            currentSol.nbEdgesConflict--;
-            if (tConflicts[indiceSommet] == 0)
-                currentSol.nbNodesConflict--;
-            if (tConflicts[node] == 0)
-                currentSol.nbNodesConflict--;
-
-            for (int j = 0; j < nbColors; j++) {
-                tNewConflitsWithColor[indiceSommet][j]++;
-                tNewConflitsWithColor[node][j]++;
-            }
-            tBestImprove[indiceSommet]++;
-            tBestImprove[node]++;
-        } else if (currentSol.tColor[indiceSommet] == color) {
-            tConflicts[indiceSommet]++;
-            tConflicts[node]++;
-            currentSol.nbEdgesConflict++;
-            if (tConflicts[indiceSommet] == 1) {
-                currentSol.nbNodesConflict++;
-                if (tNodeAdded[indiceSommet] != 1) {
-                    tNodeAdded[indiceSommet] = 1;
-                    tNodeWithConflict[nbNodeWithConflict++] = indiceSommet;
-                }
-            }
-            if (tConflicts[node] == 1) {
-                currentSol.nbNodesConflict++;
-                if (tNodeAdded[node] != 1) {
-                    tNodeAdded[node] = 1;
-                    tNodeWithConflict[nbNodeWithConflict++] = node;
-                }
-            }
-            for (int j = 0; j < nbColors; j++) {
-                tNewConflitsWithColor[indiceSommet][j]--;
-                tNewConflitsWithColor[node][j]--;
-            }
-            tBestImprove[indiceSommet]--;
-            tBestImprove[node]--;
-        }
-
-        tNewConflitsWithColor[indiceSommet][prevColor]--;
-        tNewConflitsWithColor[indiceSommet][color]++;
-
-        /////////////////////
-        //// ajout pour garder la meilleur transition
-        int bestImprove = tBestImprove[indiceSommet];
-
-        if (tNewConflitsWithColor[indiceSommet][prevColor] < bestImprove) {
-            tBestImprove[indiceSommet]--;
-            ttBestImproveColor[indiceSommet][0] = prevColor;
-            tNbBestImprove[indiceSommet] = 1;
-        } else if (tNewConflitsWithColor[indiceSommet][prevColor] == bestImprove) {
-            ttBestImproveColor[indiceSommet][tNbBestImprove[indiceSommet]] = prevColor;
-            tNbBestImprove[indiceSommet]++;
-        }
-
-        if ((tNewConflitsWithColor[indiceSommet][color] - 1) ==
-            bestImprove) { // si c'était le meilleur
-            ///
-            int nbBestImprove = tNbBestImprove[indiceSommet];
-            if (nbBestImprove > 1) {
-                tNbBestImprove[indiceSommet]--;
-                int pos, found = 0;
-                for (pos = 0; found != 1; pos++) {
-                    if (ttBestImproveColor[indiceSommet][pos] == color)
-                        found = 1;
-                }
-
-                for (pos = pos; pos < nbBestImprove; pos++) {
-                    ttBestImproveColor[indiceSommet][pos - 1] =
-                        ttBestImproveColor[indiceSommet][pos];
-                }
-            } else {
-                ///
-                int nbBestVal = 0;
-                int bestVal = graph->nb_edges + 1;
-                for (int j = 0; j < nbColors; j++) {
-                    int val = tNewConflitsWithColor[indiceSommet][j];
-                    if (val < bestVal) {
-                        bestVal = val;
-                        ttBestImproveColor[indiceSommet][0] = j;
-                        nbBestVal = 1;
-                    } else if (val == bestVal) {
-                        ttBestImproveColor[indiceSommet][nbBestVal] = j;
-                        nbBestVal++;
-                    }
-                }
-                tBestImprove[indiceSommet] = bestVal;
-                tNbBestImprove[indiceSommet] = nbBestVal;
-            }
+        if (solution._penalty <= best_solution._penalty) {
+            //// si <= : dernière meilleure rencontrée ; si < : premiere meilleure
+            if (solution._penalty < best_solution._penalty)
+                solution.nbIterationsFirst = turn;
+            best_solution = solution;
         }
     }
-
-    if (nbIterations % 100 ==
-        0) { // arbitrairement tous les 100 on recalcule les noeuds avec conflit
-        resetNodeWithConflict();
-    }
-}
-
-void TabouSearch::updateAnalyseData() {
-    int nb_vertices = graph->nb_vertices;
-    for (int i = 0; i < nb_vertices; i++) {
-        tNbConflicts[i] += tConflicts[i];
-        tTotalBestImprove[i] += tBestImprove[i];
-    }
-}
-
-void TabouSearch::saveAnalyse() {
-    FILE *f = NULL;
-    int nb_vertices = graph->nb_vertices;
-
-    //// Nb Changes
-    f = fopen((analyseBaseName + "NbChanges.xls").c_str(), "a");
-    for (int i = 0; i < nb_vertices; i++) {
-        fprintf(f, "%d ", (int)tNbChanges[i]);
-    }
-    fprintf(f, "\n");
-    fclose(f);
-
-    //// Nb Conflicts
-    f = fopen((analyseBaseName + "NbConflicts.xls").c_str(), "a");
-    for (int i = 0; i < nb_vertices; i++) {
-        fprintf(f, "%d ", (int)tNbConflicts[i]);
-    }
-    fprintf(f, "\n");
-    fclose(f);
-
-    //// Best improvement per node
-    f = fopen((analyseBaseName + "BestImprove.xls").c_str(), "a");
-    for (int i = 0; i < nb_vertices; i++) {
-        fprintf(f, "%d ", (int)tTotalBestImprove[i]);
-    }
-    fprintf(f, "\n");
-    fclose(f);
+    return turn;
 }

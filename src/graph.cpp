@@ -1,4 +1,4 @@
-#include "graphe.h"
+#include "graph.h"
 
 #include <fstream>
 
@@ -7,23 +7,32 @@
 #include <fmt/printf.h>
 #pragma GCC diagnostic pop
 
+std::unique_ptr<const Graph> Graph::g = nullptr;
+
+void Graph::init_graph(std::unique_ptr<const Graph> graph_) {
+    Graph::g = std::move(graph_);
+}
+
 Graph::Graph(const std::string &name_,
              const int &nb_vertices_,
              const int &nb_edges_,
              const std::vector<std::pair<int, int>> &edges_list_,
              const std::vector<std::vector<bool>> &adjacency_matrix_,
              const std::vector<std::vector<int>> &neighborhood_,
-             const std::vector<int> &degrees_)
+             const std::vector<int> &degrees_,
+             const int &nb_colors_)
     : name(name_),
       nb_vertices(nb_vertices_),
       nb_edges(nb_edges_),
       edges_list(edges_list_),
       adjacency_matrix(adjacency_matrix_),
       neighborhood(neighborhood_),
-      degrees(degrees_) {
+      degrees(degrees_),
+      nb_colors(nb_colors_) {
 }
 
-Graph *load_graph(const std::string &instance_name) {
+const std::unique_ptr<const Graph> load_graph(const std::string &instance_name,
+                                              const int &nb_colors) {
     // load the edges and vertices of the graph
     std::ifstream file;
     file.open("../instances/gcp_reduced/" + instance_name + ".col");
@@ -77,11 +86,12 @@ Graph *load_graph(const std::string &instance_name) {
     for (int vertex{0}; vertex < nb_vertices; ++vertex) {
         degrees[vertex] = static_cast<int>(neighborhood[vertex].size());
     }
-    return new Graph(instance_name,
-                     nb_vertices,
-                     nb_edges,
-                     edges_list,
-                     adjacency_matrix,
-                     neighborhood,
-                     degrees);
+    return std::make_unique<Graph>(instance_name,
+                                   nb_vertices,
+                                   nb_edges,
+                                   edges_list,
+                                   adjacency_matrix,
+                                   neighborhood,
+                                   degrees,
+                                   nb_colors);
 }

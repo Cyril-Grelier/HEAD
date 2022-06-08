@@ -1,181 +1,37 @@
-
-#include <iomanip>
-#include <iostream>
-#include <math.h>
-#include <omp.h>
-#include <sstream>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/time.h>
-#include <unistd.h>
-
 #include "head.h"
 
-#include "util/gfile.h"
-#define ANALYSE 0
-
-using namespace std;
-
-void Head::compute() {
-    startTime = clock();
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    humanTime =
-        static_cast<double>(tv.tv_sec) + static_cast<double>(tv.tv_usec) / 1000000.0;
-
-    buildBaseName();
-    initRandSeed();
-    tsaveConfig = time(NULL);
-
-    vPopulation.resize(4); // 2 pour la population courante, 2 pour l'archive
-
-    nbIterations = nbIterationsCross = bestSolNbIterationsCross = 0;
-
-    if (startingConf != "") { /// case where we start from a previous configuration
-        printf("Initial configuration load: %s\n", startingConf.c_str());
-        loadConfig(startingConf);
-    } else { /// case by default: random initilization
-        vPopulation[0] = Solution(graph, nbColors);
-        vPopulation[1] = Solution(graph, nbColors);
-        vPopulation[2] = Solution(graph, nbColors); ///  individu elite1
-        vPopulation[3] = Solution(graph, nbColors); ///  individu elite2
-        bestSol = vPopulation[0];
-    }
-    vector<Solution> vFils(2);
-    vector<TabouSearch> vTs(2, TabouSearch(graph, nbColors));
-
-    int seuil = swapingRate * graph->nb_vertices;
-    proxi = 0;
-    bool found = false;
-    int currentElite = 0;
-
-    vTs[0].randSeed = randSeed[0];
-    vTs[1].randSeed = randSeed[1];
-
-    if (tabucol) {
-        vTs[0].compute(vPopulation[0], nbLocalSearch);
-        bestSol = vPopulation[0];
-        nbIterations = bestSol.nbIterations;
-    } else {
-        while (!found && proxi < seuil &&
-               (nbGeneration < 0 || nbIterationsCross < nbGeneration) &&
-               (difftime(time(NULL), humanTime) < maxsecondes || maxsecondes < 0)) {
-            //////// Save running state (each 10 minutes)
-            if (difftime(time(NULL), tsaveConfig) >= 600) // 600 secondes / 10 minutes
-                saveConfig();
-
-            nbIterationsCross++;
-
-            vFils[0] = buildChild(vPopulation, 0);
-            vFils[1] = buildChild(vPopulation, 1);
-
-#pragma omp parallel for
-            for (int i = 0; i < 2; i++) {
-                vTs[i].compute(vFils[i], nbLocalSearch);
-            }
-
-            for (int i = 0; i < 2; i++) {
-                nbIterations += vTs[i].currentSol.nbIterations;
-                if (vFils[i].nbEdgesConflict == 0)
-                    found = true;
-            }
-            for (int i = 0; i < 2; i++) {
-                if (vFils[i].nbEdgesConflict < bestSol.nbEdgesConflict) {
-                    bestSol = vFils[i];
-                    bestSolNbIterationsCross = nbIterationsCross;
-                }
-                if (vFils[i].nbEdgesConflict <= vPopulation[i].nbEdgesConflict ||
-                    rand() / (double)RAND_MAX < tauxAcceptWorst)
-                    vPopulation[i] = vFils[i];
-                if (vFils[i].nbEdgesConflict <=
-                    vPopulation[2 + currentElite].nbEdgesConflict)
-                    vPopulation[2 + currentElite] = vFils[i];
-            }
-
-            proxi = vPopulation[0].proxi(vPopulation[1]);
-
-            if (debug) {
-                printPopulation();
-            }
-
-            if (swapIter > 0 && (nbIterationsCross % swapIter == 0 || proxi >= seuil)) {
-                currentElite = (currentElite + 1) % 2;
-
-                int indivToReplace = rand() / (double)RAND_MAX * 2;
-                if (vPopulation[(indivToReplace + 1) % 2].proxi(
-                        vPopulation[2 + currentElite]) >=
-                    seuil) /// if elite and indivToReplace are too similar, choose the
-                           /// other individual for the replacement
-                    indivToReplace = (indivToReplace + 1) % 2;
-
-                vPopulation[indivToReplace] = vPopulation[2 + currentElite];
-                vPopulation[2 + currentElite].nbEdgesConflict = 999999;
-
-                proxi = vPopulation[0].proxi(vPopulation[1]);
-
-                if (debug)
-                    printf("\nSwap\n");
-            }
-        }
-    }
-}
-
-///////////////////////////////////////
-/////////////   HEAD PRIME   //////////
-///////////////////////////////////////
-
-void Head::initRandSeed() {
-    if (startingRand == -1) {
-        srand(time(NULL));
-        startingRand = rand();
-    }
-    unsigned int rdSeed = (userRandSeed > 0) ? userRandSeed : time(NULL) + startingRand;
-    srand(rdSeed);
-    randSeed[0] = rdSeed;
-    randSeed[1] = rdSeed + 1;
-}
-
 /// Crossover operator: GPX algorithm
-/// Parents are tColor (couleur de chaque sommet)
-Solution Head::buildChild(vector<Solution> &vParents, int startParent) {
-    ///// teste s'il faut accorder un poids différent à chaque parent
-    if (weightParent >= 0) {
-        vector<double> vPoids(2);
-        vPoids[0] = weightParent;
-        vPoids[1] = 1 - weightParent;
-        return buildChild(vParents, vPoids);
-    }
+/// Parents are colors (couleur de chaque sommet)
+Solution Head::buildChild(std::vector<Solution> &vParents, int startParent) {
 
-    Solution res(graph, nbColors);
+    Solution res;
 
     int nbParents = 2;
-    std::vector<std::vector<double>> tSizeOfColors(nbParents,
-                                                   std::vector<double>(nbColors, 0));
+    std::vector<std::vector<double>> tSizeOfColors(
+        nbParents, std::vector<double>(Graph::g->nb_colors, 0));
 
     for (int i = 0; i < nbParents; i++) {
-        for (int j = 0; j < graph->nb_vertices; j++) {
-            tSizeOfColors[i][vParents[i].tColor[j]]++;
+        for (int j = 0; j < Graph::g->nb_vertices; j++) {
+            tSizeOfColors[i][vParents[i]._colors[j]]++;
         }
     }
 
-    for (int i = 0; i < graph->nb_vertices; i++)
-        res.tColor[i] = -1;
+    for (int i = 0; i < Graph::g->nb_vertices; i++)
+        res._colors[i] = -1;
 
     double valMax;
     int colorMax;
-
-    for (int i = 0; i < nbColors; i++) {
+    for (int i = 0; i < Graph::g->nb_colors; i++) {
         int indice = (startParent + i) % nbParents;
         Solution &currentParent = vParents[indice];
         std::vector<double> currentSizeOfColors = tSizeOfColors[indice];
         valMax = -1;
         colorMax = -1;
 
-        if (i < nbRandCross) {
-            int startColor = rand() / (double)RAND_MAX * nbColors;
-            for (int j = 0; j < nbColors && colorMax < 0; j++) {
-                int color = (startColor + j) % nbColors;
+        if (i < 0) {
+            int startColor = rand() / (double)RAND_MAX * Graph::g->nb_colors;
+            for (int j = 0; j < Graph::g->nb_colors && colorMax < 0; j++) {
+                int color = (startColor + j) % Graph::g->nb_colors;
                 double currentVal = currentSizeOfColors[color];
                 if (currentVal > 0) {
                     valMax = currentVal;
@@ -183,9 +39,9 @@ Solution Head::buildChild(vector<Solution> &vParents, int startParent) {
                 }
             }
         } else {
-            int startColor = rand() / (double)RAND_MAX * nbColors;
-            for (int j = 0; j < nbColors; j++) {
-                int color = (startColor + j) % nbColors;
+            int startColor = rand() / (double)RAND_MAX * Graph::g->nb_colors;
+            for (int j = 0; j < Graph::g->nb_colors; j++) {
+                int color = (startColor + j) % Graph::g->nb_colors;
                 double currentVal = currentSizeOfColors[color];
 
                 if (currentVal > valMax) {
@@ -195,274 +51,117 @@ Solution Head::buildChild(vector<Solution> &vParents, int startParent) {
             }
         }
 
-        for (int j = 0; j < graph->nb_vertices; j++) {
-            if (currentParent.tColor[j] == colorMax && res.tColor[j] < 0) {
-                res.tColor[j] = i;
+        for (int j = 0; j < Graph::g->nb_vertices; j++) {
+            if (currentParent._colors[j] == colorMax && res._colors[j] < 0) {
+                res._colors[j] = i;
 
                 for (int k = 0; k < nbParents; k++) {
-                    tSizeOfColors[k][vParents[k].tColor[j]]--;
+                    tSizeOfColors[k][vParents[k]._colors[j]]--;
                 }
             }
         }
     }
 
     int nbNotAttribute = 0;
-    for (int i = 0; i < graph->nb_vertices; i++) {
-        if (res.tColor[i] < 0) {
+    for (int i = 0; i < Graph::g->nb_vertices; i++) {
+        if (res._colors[i] < 0) {
             nbNotAttribute++;
-            res.tColor[i] = (rand() / (double)RAND_MAX) * nbColors;
+            res._colors[i] = (rand() / (double)RAND_MAX) * Graph::g->nb_colors;
         }
     }
     return res;
 }
 
-/// Crossover operator: weighted parents for the unbalance crossover
-Solution Head::buildChild(vector<Solution> &vParents, vector<double> &vPoids) {
-    Solution res(graph, nbColors);
-
-    int nbParents = 2;
-
-    std::vector<std::vector<int>> tSizeOfColors(nbParents, std::vector<int>(nbColors, 0));
-
-    for (int i = 0; i < nbParents; i++) {
-        for (int j = 0; j < graph->nb_vertices; j++) {
-            tSizeOfColors[i][vParents[i].tColor[j]]++;
-        }
-    }
-
-    for (int i = 0; i < graph->nb_vertices; i++)
-        res.tColor[i] = -1;
-
-    double valMax;
-    int colorMax;
-
-    double totalPoids = 0;
-    for (unsigned int i = 0; i < vPoids.size(); i++) {
-        totalPoids += vPoids[i];
-    }
-
-    for (int i = 0; i < nbColors; i++) {
-        double randVal = rand() / (double)RAND_MAX * totalPoids - vPoids[0];
-        int indice = 0;
-        while (randVal >= 0) {
-            indice++;
-            randVal -= vPoids[indice];
-        }
-
-        Solution &currentParent = vParents[indice];
-        std::vector<int> currentSizeOfColors = tSizeOfColors[indice];
-        valMax = -1;
-        colorMax = -1;
-
-        if (i < nbRandCross) {
-            int startColor = rand() / (double)RAND_MAX * nbColors;
-            for (int j = 0; j < nbColors && colorMax < 0; j++) {
-                int color = (startColor + j) % nbColors;
-                double currentVal = currentSizeOfColors[color];
-                if (currentVal > 0) {
-                    valMax = currentVal;
-                    colorMax = color;
-                }
-            }
-        } else {
-            int startColor = rand() / (double)RAND_MAX * nbColors;
-            for (int j = 0; j < nbColors; j++) {
-                int color = (startColor + j) % nbColors;
-                double currentVal = (double)currentSizeOfColors[color];
-
-                if (currentVal > valMax) {
-                    valMax = currentVal;
-                    colorMax = color;
-                }
-            }
-        }
-
-        for (int j = 0; j < graph->nb_vertices; j++) {
-            if (currentParent.tColor[j] == colorMax && res.tColor[j] < 0) {
-                res.tColor[j] = i;
-
-                for (int k = 0; k < nbParents; k++) {
-                    tSizeOfColors[k][vParents[k].tColor[j]]--;
-                }
-            }
-        }
-    }
-
-    for (int i = 0; i < graph->nb_vertices; i++) {
-        if (res.tColor[i] < 0) {
-            res.tColor[i] = (rand() / (double)RAND_MAX) * nbColors;
-        }
-    }
-
-    return res;
-}
-
-///////////////////////////////////////
-/////////////  PRINT - SAVE  //////////
-///////////////////////////////////////
-
-void Head::printPopulation(ostream &st) {
-    st << "k-" << nbColors << " " << nbIterationsCross << ": ";
-    st << "fitness=" << vPopulation[0].nbEdgesConflict << " "
-       << vPopulation[1].nbEdgesConflict << " (" << vPopulation[2].nbEdgesConflict << " "
-       << vPopulation[3].nbEdgesConflict << ")\t";
-    st << "\tprox=" << proxi;
-    st << " best=" << bestSol.nbEdgesConflict << "(it" << bestSolNbIterationsCross << ")"
-       << endl;
-}
-
-void Head::saveBestColoring(char *outputFile) {
-    FILE *f;
-    time_t rawtime;
-    struct tm *timeinfo;
-    time(&rawtime);
-    timeinfo = localtime(&rawtime);
-    f = fopen(outputFile, "a");
-    if (f != NULL) {
-        printf("Save coloring in : %s\n", outputFile);
-        fprintf(f, "# Finish with %d edge(s) in conflict\n", bestSol.nbEdgesConflict);
-        fprintf(f,
-                "#%s#NbLS : %llu\tNbCross: %d\tTime(min): %0.2f "
-                "ls%lld\tswap%d\trandCross%d\tweightOfParent%0.0f\tacceptWorst%f\tSeed : "
-                "%u\n",
-                asctime(timeinfo),
-                nbIterations,
-                nbIterationsCross,
-                (clock() - startTime) / (double)CLOCKS_PER_SEC / 60.,
-                nbLocalSearch,
-                swapIter,
-                nbRandCross,
-                weightParent * 100,
-                tauxAcceptWorst,
-                randSeed[0]);
-        for (int i = 0; i < graph->nb_vertices; i++) {
-            fprintf(f, "%d ", bestSol.tColor[i]);
-        }
-        fprintf(f, "\n");
-        fclose(f);
-    } else
-        printf("Problem to save in file : %s\n", outputFile);
-}
-
-void Head::saveConfig() {
-    tsaveConfig = time(NULL);
-
-    char computerName[255];
-    gethostname(computerName, 255);
-
-    ostringstream oss;
-    oss << "." << computerName << "_" << baseName << "_save.txt";
-    string filename = oss.str();
-    FILE *f;
-
-    if (debug) {
-        printf("Save in %s\n", filename.c_str());
-    }
-
-    f = fopen(filename.c_str(), "w");
-
-    if (!f) {
-        printf("File %s can not be open.\n", filename.c_str());
-    }
-    time_t rawtime;
-    struct tm *timeinfo;
-    time(&rawtime);
-    timeinfo = localtime(&rawtime);
-    fprintf(f, "#%s", asctime(timeinfo));
-
-    oss.str("");
-    printPopulation(oss);
-    fprintf(f, "#Current state : %s\n\n", oss.str().c_str());
-    fprintf(f, "#Parameters :\n");
-    fprintf(f,
-            "%s\t%d\t%lld\t%d\t%d\t%d\t%f\t%f\n\n",
-            graph->name.c_str(),
-            nbColors,
-            nbLocalSearch,
-            nbGeneration,
-            nbRandCross,
-            swapIter,
-            tauxAcceptWorst,
-            weightParent * 100);
-    fprintf(f, "#Iteration / cross / bestCross:\n");
-    fprintf(
-        f, "%llu\t%d\t%d\n\n", nbIterations, nbIterationsCross, bestSolNbIterationsCross);
-
-    double elapsedTime = (clock() - startTime) / (double)CLOCKS_PER_SEC / 60.0;
+void Head::compute() {
     struct timeval tv;
     gettimeofday(&tv, NULL);
-    double humanT =
-        ((double)tv.tv_sec + (double)tv.tv_usec / 1000000.0 - humanTime) / 60.0;
-    fprintf(f, "#cpu time / humain time:\n");
-    fprintf(f, "%f\t%f\n\n", elapsedTime, humanT);
-    fclose(f);
+    humanTime =
+        static_cast<double>(tv.tv_sec) + static_cast<double>(tv.tv_usec) / 1000000.0;
 
-    for (unsigned int i = 0; i < vPopulation.size(); i++)
-        vPopulation[i].save(filename);
+    // initRandSeed
+    unsigned int rdSeed = time(NULL);
+    srand(rdSeed);
+    unsigned int randSeed[2] = {rdSeed, rdSeed + 1};
+    // initRandSeed() end
 
-    f = fopen(filename.c_str(), "a");
-    fprintf(f, "# BestSolutions\n");
-    fclose(f);
-    bestSol.save(filename);
-}
+    // 2 pour la population courante, 2 pour l'archive
+    std::vector<Solution> vPopulation(4);
 
-void Head::loadConfig(std::string filename) {
-    GInputFile infile(filename);
-    infile.open();
-    // char* buf;
-    // char* tok;
+    int bestSolNbIterationsCross = 0;
+    nbIterations = nbIterationsCross = 0;
 
-    /// Paramètres (sont chargés dans le main)
-    infile.readUncommentedLine(); // Paramètres
+    // random initialization
+    vPopulation[0].init_random();
+    vPopulation[1].init_random();
+    vPopulation[2].init_random(); ///  individu elite1
+    vPopulation[3].init_random(); ///  individu elite2
 
-    /// Starting iteration
-    infile.readUncommentedLine();
-    nbIterations = infile.getNextIntToken();
-    nbIterationsCross = infile.getNextIntToken();
-    bestSolNbIterationsCross = infile.getNextIntToken();
+    bestSol = vPopulation[0];
 
-    printf("\tParametres charges\n");
+    std::vector<Solution> vFils(2);
 
-    /// Starting time (chargé dans le main)
-    infile.readUncommentedLine(); // Starting times
+    int seuil = 0.99 * Graph::g->nb_vertices;
+    int proximity = 0;
+    bool found = false;
+    int currentElite = 0;
+    int swapIter = -1;
 
-    /// Population
-    int nb_vertices = graph->nb_vertices;
-    for (int i = 0; i < 4; i++) {
-        infile.readUncommentedLine();
-        Solution sol(graph, nbColors);
-        for (int j = 0; j < nb_vertices; j++)
-            sol.tColor[i] = infile.getNextIntToken();
-        sol.computeConflicts();
-        vPopulation[i] = sol;
+    while (!found && proximity < seuil and
+           (difftime(time(NULL), humanTime) < max_secondes || max_secondes < 0)) {
+
+        nbIterationsCross++;
+
+        vFils[0] = buildChild(vPopulation, 0);
+        vFils[1] = buildChild(vPopulation, 1);
+
+        std::vector<int> nb_iters(2, 0);
+#pragma omp parallel for
+        for (int i = 0; i < 2; i++) {
+            nb_iters[i] = tabu_search(vFils[i], nbLocalSearch, randSeed[i]);
+        }
+
+        for (int i = 0; i < 2; i++) {
+            nbIterations += nb_iters[i];
+            if (vFils[i]._penalty == 0)
+                found = true;
+        }
+        for (int i = 0; i < 2; i++) {
+            if (vFils[i]._penalty < bestSol._penalty) {
+                bestSol = vFils[i];
+                bestSolNbIterationsCross = nbIterationsCross;
+            }
+            if (vFils[i]._penalty <= vPopulation[i]._penalty ||
+                rand() / (double)RAND_MAX < tauxAcceptWorst)
+                vPopulation[i] = vFils[i];
+            if (vFils[i]._penalty <= vPopulation[2 + currentElite]._penalty)
+                vPopulation[2 + currentElite] = vFils[i];
+        }
+
+        proximity = vPopulation[0].proxi(vPopulation[1]);
+
+        std::cout << "k-" << Graph::g->nb_colors << " " << nbIterationsCross << ": "
+                  << "fitness=" << vPopulation[0]._penalty << " "
+                  << vPopulation[1]._penalty << " (" << vPopulation[2]._penalty << " "
+                  << vPopulation[3]._penalty << ")\t"
+                  << "\tprox=" << proximity << " best=" << bestSol._penalty << "(it"
+                  << bestSolNbIterationsCross << ")" << std::endl;
+
+        if (swapIter > 0 && (nbIterationsCross % swapIter == 0 || proximity >= seuil)) {
+            currentElite = (currentElite + 1) % 2;
+
+            int indivToReplace = rand() / (double)RAND_MAX * 2;
+            if (vPopulation[(indivToReplace + 1) % 2].proxi(
+                    vPopulation[2 + currentElite]) >=
+                seuil) /// if elite and indivToReplace are too similar, choose the
+                       /// other individual for the replacement
+                indivToReplace = (indivToReplace + 1) % 2;
+
+            vPopulation[indivToReplace] = vPopulation[2 + currentElite];
+            vPopulation[2 + currentElite]._penalty = 999999;
+
+            proximity = vPopulation[0].proxi(vPopulation[1]);
+
+            printf("\nSwap\n");
+        }
     }
-    printf("\tPopulation chargee %d %d %d %d\n",
-           vPopulation[0].tColor[0],
-           vPopulation[1].tColor[0],
-           vPopulation[2].tColor[0],
-           vPopulation[3].tColor[0]);
-
-    /// Bestsol
-    infile.readUncommentedLine();
-    bestSol = Solution(graph, nbColors);
-    for (int i = 0; i < nb_vertices; i++)
-        bestSol.tColor[i] = infile.getNextIntToken();
-    bestSol.computeConflicts();
-    printf("\tBestsol chargee\n");
-
-    infile.close();
-
-    if (debug)
-        printf("Configuration chargee !!\n");
-}
-
-void Head::buildBaseName() {
-    ostringstream oss;
-    oss << graph->name << "_k" << nbColors;
-    baseName = oss.str();
-    size_t pos = baseName.find_last_of('/') + 1;
-
-    if (pos > baseName.length())
-        pos = 0;
-    baseName = baseName.substr(pos);
 }
