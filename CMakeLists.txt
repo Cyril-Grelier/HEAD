@@ -16,6 +16,7 @@ add_executable(${CMAKE_PROJECT_NAME}
         src/head.cpp src/head.h
         src/solution.cpp src/solution.h
         src/tabouSearch.cpp src/tabouSearch.h
+        src/random_generator.cpp src/random_generator.h
         )
 
 set_property(TARGET ${CMAKE_PROJECT_NAME} PROPERTY CXX_STANDARD 17)

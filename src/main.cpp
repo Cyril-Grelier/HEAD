@@ -1,5 +1,6 @@
 
 #include "head.h"
+#include "random_generator.h"
 
 int main() {
 
@@ -26,11 +27,13 @@ int main() {
     const int nb_colors = 55;
     Graph::init_graph(load_graph(instance, nb_colors));
 
+    rd::generator.seed(time(nullptr));
+
     Head solver = Head();
 
     // >> Solver.parameters
     solver.nbLocalSearch = 30000;
-    solver.tauxAcceptWorst = 1.0;
+    solver.tauxAcceptWorst = 100;
     solver.max_secondes = -1;
     // << solver.parameters
 

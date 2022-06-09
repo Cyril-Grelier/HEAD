@@ -20,8 +20,8 @@ class Head {
     int nbIterationsCross;
 
     int nbLocalSearch;
-    double tauxAcceptWorst;
+    int tauxAcceptWorst;
 
     int max_secondes{-1};
-    double humanTime;
+    time_t humanTime;
 };

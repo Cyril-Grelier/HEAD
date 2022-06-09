@@ -1,88 +1,80 @@
 #include "head.h"
+#include "random_generator.h"
 
 /// Crossover operator: GPX algorithm
 /// Parents are colors (couleur de chaque sommet)
 Solution Head::buildChild(std::vector<Solution> &vParents, int startParent) {
 
-    Solution res;
+    Solution child;
 
-    int nbParents = 2;
-    std::vector<std::vector<double>> tSizeOfColors(
-        nbParents, std::vector<double>(Graph::g->nb_colors, 0));
+    std::vector<std::vector<int>> nb_vertices_per_colors(
+        2, std::vector<int>(Graph::g->nb_colors, 0));
 
-    for (int i = 0; i < nbParents; i++) {
+    for (int i = 0; i < 2; i++) {
         for (int j = 0; j < Graph::g->nb_vertices; j++) {
-            tSizeOfColors[i][vParents[i]._colors[j]]++;
+            nb_vertices_per_colors[i][vParents[i]._colors[j]]++;
         }
     }
 
-    for (int i = 0; i < Graph::g->nb_vertices; i++)
-        res._colors[i] = -1;
+    std::uniform_int_distribution<int> distribution_colors(0, Graph::g->nb_colors - 1);
 
-    double valMax;
-    int colorMax;
-    for (int i = 0; i < Graph::g->nb_colors; i++) {
-        int indice = (startParent + i) % nbParents;
-        Solution &currentParent = vParents[indice];
-        std::vector<double> currentSizeOfColors = tSizeOfColors[indice];
-        valMax = -1;
-        colorMax = -1;
+    for (int color = 0; color < Graph::g->nb_colors; color++) {
+        int indice = (startParent + color) % 2;
+        const auto &parent = vParents[indice];
+        const auto &nb_vertices_per_colors_ = nb_vertices_per_colors[indice];
+        int valMax = -1;
+        int colorMax = -1;
 
-        if (i < 0) {
-            int startColor = rand() / (double)RAND_MAX * Graph::g->nb_colors;
-            for (int j = 0; j < Graph::g->nb_colors && colorMax < 0; j++) {
-                int color = (startColor + j) % Graph::g->nb_colors;
-                double currentVal = currentSizeOfColors[color];
+        const int startColor = distribution_colors(rd::generator);
+
+        if (color < 0) {
+            // pick a random non empty color
+            for (int j = 0; j < Graph::g->nb_colors; j++) {
+                int color_ = (startColor + j) % Graph::g->nb_colors;
+                int currentVal = nb_vertices_per_colors_[color_];
                 if (currentVal > 0) {
                     valMax = currentVal;
-                    colorMax = color;
+                    colorMax = color_;
+                    break;
                 }
             }
         } else {
-            int startColor = rand() / (double)RAND_MAX * Graph::g->nb_colors;
+            // for the first iteration, pick the largest group of color
             for (int j = 0; j < Graph::g->nb_colors; j++) {
-                int color = (startColor + j) % Graph::g->nb_colors;
-                double currentVal = currentSizeOfColors[color];
-
+                int color_ = (startColor + j) % Graph::g->nb_colors;
+                int currentVal = nb_vertices_per_colors_[color_];
                 if (currentVal > valMax) {
                     valMax = currentVal;
-                    colorMax = color;
+                    colorMax = color_;
                 }
             }
         }
-
+        //
         for (int j = 0; j < Graph::g->nb_vertices; j++) {
-            if (currentParent._colors[j] == colorMax && res._colors[j] < 0) {
-                res._colors[j] = i;
+            if (parent._colors[j] == colorMax and child._colors[j] < 0) {
+                child._colors[j] = color;
 
-                for (int k = 0; k < nbParents; k++) {
-                    tSizeOfColors[k][vParents[k]._colors[j]]--;
+                for (int k = 0; k < 2; k++) {
+                    nb_vertices_per_colors[k][vParents[k]._colors[j]]--;
                 }
             }
         }
     }
 
-    int nbNotAttribute = 0;
+    // greedy to complete the solution
     for (int i = 0; i < Graph::g->nb_vertices; i++) {
-        if (res._colors[i] < 0) {
-            nbNotAttribute++;
-            res._colors[i] = (rand() / (double)RAND_MAX) * Graph::g->nb_colors;
+        if (child._colors[i] < 0) {
+            child._colors[i] = distribution_colors(rd::generator);
         }
     }
-    return res;
+    return child;
 }
 
 void Head::compute() {
     struct timeval tv;
     gettimeofday(&tv, NULL);
-    humanTime =
-        static_cast<double>(tv.tv_sec) + static_cast<double>(tv.tv_usec) / 1000000.0;
-
-    // initRandSeed
-    unsigned int rdSeed = time(NULL);
-    srand(rdSeed);
-    unsigned int randSeed[2] = {rdSeed, rdSeed + 1};
-    // initRandSeed() end
+    humanTime = static_cast<time_t>(static_cast<double>(tv.tv_sec) +
+                                    static_cast<double>(tv.tv_usec) / 1000000.0);
 
     // 2 pour la population courante, 2 pour l'archive
     std::vector<Solution> vPopulation(4);
@@ -100,14 +92,16 @@ void Head::compute() {
 
     std::vector<Solution> vFils(2);
 
-    int seuil = 0.99 * Graph::g->nb_vertices;
+    int seuil = static_cast<int>(0.99 * Graph::g->nb_vertices);
     int proximity = 0;
     bool found = false;
     int currentElite = 0;
     int swapIter = -1;
 
-    while (!found && proximity < seuil and
-           (difftime(time(NULL), humanTime) < max_secondes || max_secondes < 0)) {
+    std::uniform_int_distribution<int> distribution(0, 99);
+
+    while (!found and proximity < seuil and
+           (difftime(time(NULL), humanTime) < max_secondes or max_secondes < 0)) {
 
         nbIterationsCross++;
 
@@ -117,7 +111,7 @@ void Head::compute() {
         std::vector<int> nb_iters(2, 0);
 #pragma omp parallel for
         for (int i = 0; i < 2; i++) {
-            nb_iters[i] = tabu_search(vFils[i], nbLocalSearch, randSeed[i]);
+            nb_iters[i] = tabu_search(vFils[i], nbLocalSearch);
         }
 
         for (int i = 0; i < 2; i++) {
@@ -130,9 +124,13 @@ void Head::compute() {
                 bestSol = vFils[i];
                 bestSolNbIterationsCross = nbIterationsCross;
             }
-            if (vFils[i]._penalty <= vPopulation[i]._penalty ||
-                rand() / (double)RAND_MAX < tauxAcceptWorst)
+            const int rand_number = distribution(rd::generator);
+            if (vFils[i]._penalty <= vPopulation[i]._penalty or
+                rand_number < tauxAcceptWorst)
                 vPopulation[i] = vFils[i];
+            else {
+                std::cout << rand_number << std::endl;
+            }
             if (vFils[i]._penalty <= vPopulation[2 + currentElite]._penalty)
                 vPopulation[2 + currentElite] = vFils[i];
         }
@@ -146,10 +144,12 @@ void Head::compute() {
                   << "\tprox=" << proximity << " best=" << bestSol._penalty << "(it"
                   << bestSolNbIterationsCross << ")" << std::endl;
 
-        if (swapIter > 0 && (nbIterationsCross % swapIter == 0 || proximity >= seuil)) {
+        if (swapIter > 0 and (nbIterationsCross % swapIter == 0 or proximity >= seuil)) {
             currentElite = (currentElite + 1) % 2;
 
-            int indivToReplace = rand() / (double)RAND_MAX * 2;
+            int indivToReplace = static_cast<int>(static_cast<double>(rand()) /
+                                                  static_cast<double>(RAND_MAX)) *
+                                 2;
             if (vPopulation[(indivToReplace + 1) % 2].proxi(
                     vPopulation[2 + currentElite]) >=
                 seuil) /// if elite and indivToReplace are too similar, choose the

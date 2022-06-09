@@ -1,6 +1,10 @@
 #include "tabouSearch.h"
 
-int tabu_search(Solution &best_solution, int nb_turn, unsigned int randSeed) {
+#include <iostream>
+
+#include "random_generator.h"
+
+int tabu_search(Solution &best_solution, int nb_turn) {
     const int nb_vertices{Graph::g->nb_vertices};
     const int nb_colors{Graph::g->nb_colors};
 
@@ -82,6 +86,8 @@ int tabu_search(Solution &best_solution, int nb_turn, unsigned int randSeed) {
 
     // initTables end
 
+    std::uniform_int_distribution<int> distribution_tabu(0, 10);
+
     // contient pour chaque noeud et chaque couleur la fin de la période taboue
     std::vector<std::vector<int>> tabu_matrix(nb_vertices,
                                               std::vector<int>(nb_colors, -1));
@@ -131,9 +137,9 @@ int tabu_search(Solution &best_solution, int nb_turn, unsigned int randSeed) {
                     nb_best_nb_conflicts = 1;
                 } else {
                     nb_best_nb_conflicts++;
-                    int val = static_cast<int>(rand_r(&randSeed) /
-                                               static_cast<double>(RAND_MAX)) *
-                              nb_best_nb_conflicts;
+                    std::uniform_int_distribution<int> distribution(
+                        0, nb_best_nb_conflicts - 1);
+                    int val = distribution(rd::generator);
                     if (val == 0) {
                         best_vertex = vertex;
                         best_color = color;
@@ -163,9 +169,9 @@ int tabu_search(Solution &best_solution, int nb_turn, unsigned int randSeed) {
                                (vertex_not_tabu or improve_best_solution)) {
                         // on tire aléatoirement 1 des 2
                         nb_best_nb_conflicts++;
-                        int val = static_cast<int>(rand_r(&randSeed) /
-                                                   static_cast<double>(RAND_MAX)) *
-                                  nb_best_nb_conflicts;
+                        std::uniform_int_distribution<int> distribution(
+                            0, nb_best_nb_conflicts - 1);
+                        int val = distribution(rd::generator);
                         if (val == 0) {
                             best_nb_conflicts = conflicts;
                             best_vertex = vertex;
@@ -176,13 +182,16 @@ int tabu_search(Solution &best_solution, int nb_turn, unsigned int randSeed) {
             }
         }
         if (best_vertex > -1) {
-            // updateTables(int best_vertex, int best_color)
+
             int last_color = solution._colors[best_vertex];
-            solution._colors[best_vertex] = best_color;
+            // solution.add_to_color(best_vertex, best_color);
 
             tabu_matrix[best_vertex][last_color] =
-                static_cast<int>(turn + ((rand_r(&randSeed) / (double)RAND_MAX) * 10) +
-                                 0.6 * solution.nb_conflicting_vertices);
+                turn + distribution_tabu(rd::generator) +
+                static_cast<int>(0.6 * solution.nb_conflicting_vertices);
+
+            // updateTables(int best_vertex, int best_color)
+            solution._colors[best_vertex] = best_color;
 
             for (const auto &neighbor : Graph::g->neighborhood[best_vertex]) {
                 /// répercutions sur les voisins
@@ -201,7 +210,12 @@ int tabu_search(Solution &best_solution, int nb_turn, unsigned int randSeed) {
                     }
                     best_improve_conflicts[neighbor]++;
                     best_improve_conflicts[best_vertex]++;
-                } else if (solution._colors[neighbor] == best_color) {
+                }
+
+                conflicts_colors[neighbor][last_color]--;
+            }
+            for (const auto &neighbor : Graph::g->neighborhood[best_vertex]) {
+                if (solution._colors[neighbor] == best_color) {
                     nb_conflicts[neighbor]++;
                     nb_conflicts[best_vertex]++;
                     solution._penalty++;
@@ -226,10 +240,10 @@ int tabu_search(Solution &best_solution, int nb_turn, unsigned int randSeed) {
                     best_improve_conflicts[neighbor]--;
                     best_improve_conflicts[best_vertex]--;
                 }
-
-                conflicts_colors[neighbor][last_color]--;
                 conflicts_colors[neighbor][best_color]++;
+            }
 
+            for (const auto &neighbor : Graph::g->neighborhood[best_vertex]) {
                 //// ajout pour garder la meilleur transition
                 const int best_improve = best_improve_conflicts[neighbor];
 
@@ -292,6 +306,7 @@ int tabu_search(Solution &best_solution, int nb_turn, unsigned int randSeed) {
                 // recalcule pour optimisation2
             }
         }
+
         if (solution._penalty <= best_solution._penalty) {
             //// si <= : dernière meilleure rencontrée ; si < : premiere meilleure
             if (solution._penalty < best_solution._penalty)

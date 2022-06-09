@@ -1,12 +1,13 @@
 #include "solution.h"
+#include "random_generator.h"
 
-Solution::Solution() : _colors(Graph::g->nb_vertices, 0) {
+Solution::Solution() : _colors(Graph::g->nb_vertices, -1) {
 }
 
 void Solution::init_random() {
+    std::uniform_int_distribution<int> distribution(0, Graph::g->nb_colors - 1);
     for (int i = 0; i < Graph::g->nb_vertices; i++) {
-        _colors[i] = static_cast<int>(rand() / static_cast<double>(RAND_MAX)) *
-                     Graph::g->nb_colors;
+        _colors[i] = distribution(rd::generator);
     }
 }
 
