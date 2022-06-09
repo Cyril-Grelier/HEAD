@@ -1,6 +1,7 @@
 #include "tabouSearch.h"
 
 #include <iostream>
+#include <set>
 
 #include "random_generator.h"
 
@@ -72,15 +73,11 @@ int tabu_search(Solution &best_solution, int nb_turn) {
     // optimisation2 permettant de parcourir uniquement les noeuds avec conflits
 
     // contient les noeuds avec conflit pour ne pas tout parcourir
-    std::vector<int> conflicting_nodes(nb_vertices, 0); // TODO should be a set
-    int nb_conflicting_nodes{0};
-    // permet de ne pas ajouter 2 fois le meme noeud
-    std::vector<bool> node_added(nb_vertices, false);
+    std::set<int> conflicting_nodes;
 
     for (int vertex = 0; vertex < nb_vertices; vertex++) {
         if (nb_conflicts[vertex] > 0) {
-            conflicting_nodes[nb_conflicting_nodes++] = vertex;
-            node_added[vertex] = true;
+            conflicting_nodes.insert(vertex);
         }
     }
 
@@ -101,8 +98,7 @@ int tabu_search(Solution &best_solution, int nb_turn) {
         int best_color = -1;
         int nb_best_nb_conflicts = 0;
 
-        for (int ind = 0; ind < nb_conflicting_nodes; ind++) {
-            int vertex = conflicting_nodes[ind];
+        for (const auto &vertex : conflicting_nodes) {
 
             if (nb_conflicts[vertex] == 0 or
                 best_improve_conflicts[vertex] > best_nb_conflicts) {
@@ -199,10 +195,14 @@ int tabu_search(Solution &best_solution, int nb_turn) {
                     nb_conflicts[neighbor]--;
                     nb_conflicts[best_vertex]--;
                     solution._penalty--;
-                    if (nb_conflicts[neighbor] == 0)
+                    if (nb_conflicts[neighbor] == 0) {
                         solution.nb_conflicting_vertices--;
-                    if (nb_conflicts[best_vertex] == 0)
+                        conflicting_nodes.erase(neighbor);
+                    }
+                    if (nb_conflicts[best_vertex] == 0) {
                         solution.nb_conflicting_vertices--;
+                        conflicting_nodes.erase(best_vertex);
+                    }
 
                     for (int color = 0; color < nb_colors; color++) {
                         conflicts_colors[neighbor][color]++;
@@ -221,16 +221,14 @@ int tabu_search(Solution &best_solution, int nb_turn) {
                     solution._penalty++;
                     if (nb_conflicts[neighbor] == 1) {
                         solution.nb_conflicting_vertices++;
-                        if (node_added[neighbor] != 1) {
-                            node_added[neighbor] = 1;
-                            conflicting_nodes[nb_conflicting_nodes++] = neighbor;
+                        if (conflicting_nodes.count(neighbor) == 0) {
+                            conflicting_nodes.insert(neighbor);
                         }
                     }
                     if (nb_conflicts[best_vertex] == 1) {
                         solution.nb_conflicting_vertices++;
-                        if (node_added[best_vertex] != 1) {
-                            node_added[best_vertex] = 1;
-                            conflicting_nodes[nb_conflicting_nodes++] = best_vertex;
+                        if (conflicting_nodes.count(best_vertex) == 0) {
+                            conflicting_nodes.insert(best_vertex);
                         }
                     }
                     for (int color = 0; color < nb_colors; color++) {
@@ -290,20 +288,6 @@ int tabu_search(Solution &best_solution, int nb_turn) {
                         nb_best_improve[neighbor] = nbBestVal_;
                     }
                 }
-            }
-
-            if (turn % 100 == 0) {
-                // arbitrairement tous les 100 on recalcule les noeuds avec conflit
-                nb_conflicting_nodes = 0;
-                std::fill(node_added.begin(), node_added.end(), false);
-
-                for (int vertex = 0; vertex < nb_vertices; vertex++) {
-                    if (nb_conflicts[vertex] > 0) {
-                        conflicting_nodes[nb_conflicting_nodes++] = vertex;
-                        node_added[vertex] = true;
-                    }
-                }
-                // recalcule pour optimisation2
             }
         }
 
