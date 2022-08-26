@@ -31,6 +31,7 @@ std::vector<int> Solution::compute_conflicts() {
             }
         }
     }
+    return nb_conflicts;
 }
 
 int Solution::proxi(const Solution &sol) {
