@@ -13,24 +13,21 @@ int tabu_search(Solution &best_solution, int nb_turn) {
     Solution solution = best_solution;
 
     // contient pour chaque sommet le nombre de conflits
-    std::vector<int> nb_conflicts(nb_vertices, 0);
-
-    // TODO should be already computed in solution
-    solution.computeConflicts(nb_conflicts);
+    auto nb_conflicts = solution.compute_conflicts();
 
     // contient pour chaque noeud ne nb de conflits en plus ou
     // moins si changement vers chaque couleur, suivi de la
     // meilleure couleur et meilleur gain associé
-    std::vector<std::vector<int>> conflicts_colors(nb_vertices,
-                                                   std::vector<int>(nb_colors, 0));
+    std::vector<std::vector<int>> delta_conflicts_colors(nb_vertices,
+                                                         std::vector<int>(nb_colors, 0));
 
     /// determine les delta-conflits pour chaque transition de couleur
     for (int vertex = 0; vertex < nb_vertices; vertex++) {
         for (int color = 0; color < nb_colors; color++) {
-            conflicts_colors[vertex][color] = -nb_conflicts[vertex];
+            delta_conflicts_colors[vertex][color] = -nb_conflicts[vertex];
         }
         for (const auto &neighbor : Graph::g->neighborhood[vertex]) {
-            conflicts_colors[vertex][solution._colors[neighbor]]++;
+            delta_conflicts_colors[vertex][solution._colors[neighbor]]++;
         }
     }
 
@@ -47,7 +44,7 @@ int tabu_search(Solution &best_solution, int nb_turn) {
     for (int vertex = 0; vertex < nb_vertices; vertex++) {
         int best_conflicts = std::numeric_limits<int>::max();
         for (int color = 0; color < nb_colors; color++) {
-            const int conflicts = conflicts_colors[vertex][color];
+            const int conflicts = delta_conflicts_colors[vertex][color];
             if (conflicts > best_conflicts) {
                 continue;
             }
@@ -123,7 +120,7 @@ int tabu_search(Solution &best_solution, int nb_turn) {
                     continue;
                 }
 
-                const int conflicts = conflicts_colors[vertex][color];
+                const int conflicts = delta_conflicts_colors[vertex][color];
                 const bool vertex_not_tabu{(tabu_matrix[vertex][color] < turn)};
                 const bool improve_best_solution{
                     (((conflicts + solution._penalty) < best_solution._penalty))};
@@ -149,10 +146,6 @@ int tabu_search(Solution &best_solution, int nb_turn) {
         int old_color = solution._colors[best_move.vertex];
         // solution.add_to_color(best_vertex, best_color);
 
-        tabu_matrix[best_move.vertex][old_color] =
-            turn + distribution_tabu(rd::generator) +
-            static_cast<int>(0.6 * solution.nb_conflicting_vertices);
-
         // updateTables(int best_vertex, int best_color)
         solution._colors[best_move.vertex] = best_move.color;
 
@@ -173,13 +166,13 @@ int tabu_search(Solution &best_solution, int nb_turn) {
                 }
 
                 for (int color = 0; color < nb_colors; color++) {
-                    conflicts_colors[neighbor][color]++;
-                    conflicts_colors[best_move.vertex][color]++;
+                    delta_conflicts_colors[neighbor][color]++;
+                    delta_conflicts_colors[best_move.vertex][color]++;
                 }
                 best_improve_conflicts[neighbor]++;
                 best_improve_conflicts[best_move.vertex]++;
             }
-            conflicts_colors[neighbor][old_color]--;
+            delta_conflicts_colors[neighbor][old_color]--;
         }
 
         // affect of the vertex entering in the new color
@@ -201,35 +194,35 @@ int tabu_search(Solution &best_solution, int nb_turn) {
                     }
                 }
                 for (int color = 0; color < nb_colors; color++) {
-                    conflicts_colors[neighbor][color]--;
-                    conflicts_colors[best_move.vertex][color]--;
+                    delta_conflicts_colors[neighbor][color]--;
+                    delta_conflicts_colors[best_move.vertex][color]--;
                 }
                 best_improve_conflicts[neighbor]--;
                 best_improve_conflicts[best_move.vertex]--;
             }
-            conflicts_colors[neighbor][best_move.color]++;
+            delta_conflicts_colors[neighbor][best_move.color]++;
         }
 
         for (const auto &neighbor : Graph::g->neighborhood[best_move.vertex]) {
             //// ajout pour garder la meilleur transition
             const int best_improve = best_improve_conflicts[neighbor];
 
-            if (conflicts_colors[neighbor][old_color] < best_improve) {
+            if (delta_conflicts_colors[neighbor][old_color] < best_improve) {
                 best_improve_conflicts[neighbor]--;
                 best_improve_color[neighbor].clear();
                 best_improve_color[neighbor].insert(old_color);
-            } else if (conflicts_colors[neighbor][old_color] == best_improve) {
+            } else if (delta_conflicts_colors[neighbor][old_color] == best_improve) {
                 best_improve_color[neighbor].insert(old_color);
             }
 
-            if ((conflicts_colors[neighbor][best_move.color] - 1) == best_improve) {
+            if ((delta_conflicts_colors[neighbor][best_move.color] - 1) == best_improve) {
                 // si c'était le meilleur
                 if (best_improve_color[neighbor].size() > 1) {
                     best_improve_color[neighbor].erase(best_move.color);
                 } else {
                     int best_conflicts = std::numeric_limits<int>::max();
                     for (int color = 0; color < nb_colors; color++) {
-                        const int conflicts = conflicts_colors[neighbor][color];
+                        const int conflicts = delta_conflicts_colors[neighbor][color];
                         if (conflicts > best_conflicts) {
                             continue;
                         }
@@ -243,6 +236,11 @@ int tabu_search(Solution &best_solution, int nb_turn) {
                 }
             }
         }
+
+        // update tabu matrix
+        tabu_matrix[best_move.vertex][old_color] =
+            turn + distribution_tabu(rd::generator) +
+            static_cast<int>(0.6 * solution.nb_conflicting_vertices);
 
         if (solution._penalty <= best_solution._penalty) {
             //// si <= : dernière meilleure rencontrée ; si < : premiere meilleure

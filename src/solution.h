@@ -19,7 +19,7 @@ struct Solution {
 
     void init_random();
 
-    void computeConflicts(std::vector<int> &tConflicts);
+    std::vector<int> compute_conflicts();
 
     // determine la proximité de 2 individus (on identifier les meilleurs associations de
     // couleur entre les 2 individus). si changeToBestMatching est vrai : on change les
